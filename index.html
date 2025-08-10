@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Game with Three.js</title>
+    <link rel="shortcut icon" href="#">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background: #111;
+            color: white;
+            font-family: sans-serif;
+        }
+
+        /* Main layout container: split left/right */
+        /* #main-container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        } */
+        #main-container {
+            display: flex;
+            flex-direction: row;
+            /* width: 100%;
+            height: 100%; */
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Left side: Three.js canvas */
+        #canvas-container {
+            /* flex: 1; */
+            flex: 1 1 auto;
+            /* 👈 Allow shrinking and growing */
+            position: relative;
+            background: black;
+            overflow: hidden;
+            min-width: 0;
+            /* 👈 Prevents content overflow from breaking flex */
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+
+        #pointer-lock-hint {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ccc;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            font-size: 14px;
+            border-radius: 4px;
+            z-index: 100;
+            display: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* HUD canvas stays on top */
+        #hud-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* Right UI panel */
+        #ui-panel {
+            width: 300px;
+            min-width: 250px;
+            /* 👈 prevent it from collapsing or being pushed off */
+            background-color: #222;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border-left: 1px solid #333;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px;
+            background-color: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #555;
+        }
+
+        button.green {
+            background-color: green;
+        }
+
+        #revision-info {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            pointer-events: none;
+            user-select: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="main-container">
+        <!-- Left: 3D canvas -->
+        <div id="canvas-container">
+            <canvas id="three-canvas" tabindex="0"></canvas>
+            <div id="crosshair">+</div>
+            <div id="pointer-lock-hint">Press ESC to release the mouse</div>
+            <canvas id="hud-canvas"></canvas>
+        </div>
+
+
+        <!-- Right: UI Panel -->
+        <div id="ui-panel">
+            <h2>Game UI</h2>
+            <button id="AddBtn">Add Planes (1)</button>
+            <button id="AddLBtn">Add Lights (2)</button>
+            <!-- <button id="LoadBtn">Load Planes (L)</button> -->
+
+            <button id="LoadBtn" style="position: relative; overflow: hidden;">
+                <span id="LoadBtnText" style="position: relative; z-index: 2;">Load Planes (L)</span>
+                <div id="LoadBtnProgress" style="
+                position: absolute;
+                top: 0; left: 0; bottom: 0;
+                background-color: #4caf50;
+                width: 0%;
+                z-index: 1;
+                transition: width 0.3s ease;
+                opacity: 0.5;
+            "></div>
+            </button>
+
+            <button id="SaveBtn">Save Planes (T)</button>
+            <button id="ResetBtn">Reset</button>
+            <button id="StartBtn">Start Game (G)</button>
+            <!-- Add more UI elements as needed -->
+            <div id="text-stats" style="font-family: monospace; font-size: 12px; margin-top: 10px; line-height: 1.5em;">
+                <div>FPS: <span id="fps">0</span></div>
+                <div>Meshes: <span id="meshCount">0</span></div>
+                <div>Visible Meshes: <span id="visibleMeshCount">0</span></div>
+                <div>Lights: <span id="lightCount">0</span></div>
+                <div>Materials: <span id="materialCount">0</span></div>
+                <div>Geometries: <span id="geometryCount">0</span></div>
+                <div>Textures: <span id="textureCount">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="revision-info">Version: 0.1</div>
+
+    <!-- Your Three.js app -->
+    <script type="module" src="main.js"></script>
+    <!-- FPS counter -->
+    <script src="https://cdn.jsdelivr.net/npm/stats.js@0.17.0/build/stats.min.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"></script> -->
+
+</body>
+
+</html>
