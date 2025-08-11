@@ -1,52 +1,4 @@
 {
-    "IMAGES": {
-        "TREE": {
-            "url": "assets/tree.png",
-            "transparent": true
-        },
-        "GRASS": {
-            "url": "assets/grass.png",
-            "transparent": false,
-            "repeat": {
-                "x": 10,
-                "y": 10
-            }
-        },
-        "CRATE": {
-            "url": "assets/crate.jpg"
-        },
-        "WALL": {
-            "url": "assets/wall1.png"
-        },
-        "DOORHOLE": {
-            "url": "assets/doorHole.png",
-            "transparent": true
-        },
-        "DOOR": {
-            "url": "assets/door.png"
-        },
-        "BUILDING": {
-            "url": "assets/building_seamless.jpg",
-            "repeat": {
-                "x": 1,
-                "y": 5
-            }
-        },
-        "HALFBUILDING": {
-            "url": "assets/building_seamless.jpg",
-            "repeat": {
-                "x": 0.5,
-                "y": 5
-            }
-        },
-        "CITY": {
-            "url": "assets/cityscape3.jpg",
-            "repeat": {
-                "x": 1,
-                "y": 1
-            }
-        }
-    },
     "ATLAS": {
         "ATLAS0": {
             "url": "assets/atlas_512x512_18x64x64_nopad.json"
@@ -55,28 +7,6 @@
     "MESHATLAS": {
         "ATLAS0": {
             "url": "assets/Meshes.glb"
-        }
-    },
-    "MESHES": {
-        "CHARA": {
-            "url": "https://raw.githubusercontent.com/Remi077/miniPlatformGame/main/assets/Ty.fbx",
-            "animations": {
-                "RUNNING": {
-                    "url": "https://raw.githubusercontent.com/Remi077/miniPlatformGame/main/assets/Ty@Running.fbx"
-                },
-                "JUMPING": {
-                    "url": "https://raw.githubusercontent.com/Remi077/miniPlatformGame/main/assets/Ty@Jumping.fbx"
-                },
-                "FALLING": {
-                    "url": "https://raw.githubusercontent.com/Remi077/miniPlatformGame/main/assets/Ty@Falling.fbx"
-                },
-                "ROLL": {
-                    "url": "https://raw.githubusercontent.com/Remi077/miniPlatformGame/main/assets/Ty@Roll.fbx",
-                    "startFrame": 7,
-                    "endFrame": 59,
-                    "playRate": 2.5
-                }
-            }
         }
     }
 }
