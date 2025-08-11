@@ -14,6 +14,12 @@ import {
 } from './myFunctions.js'
 import seedrandom from 'https://cdn.skypack.dev/seedrandom';
 import { DecalGeometry } from './DecalGeometry.js'
+import { GLTFLoader } from './GLTFLoader.js'
+import { mergeBufferGeometries } from './BufferGeometryUtils.js'
+
+
+
+// import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
 // import { DecalGeometry } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/geometries/DecalGeometry.js';
 // import { DecalGeometry } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/geometries/DecalGeometry.js';
 // import { startGameLoop } from './game.js';
@@ -95,6 +101,8 @@ let prevSelectX = 99999;
 let prevSelectZ = 99999;
 const EPSILON = 0.01;
 
+let drawcalls = 0;
+
 const MODEXZ = 0;
 const MODEYZ = 1;
 const MODEXY = 2;
@@ -122,11 +130,11 @@ let showMarkerYZ = false;
 let showMarkerXY = false;
 let eraserMode = false;
 
-let tileXZGroup = new THREE.Group();
-let tileXYGroup = new THREE.Group();
-let tileYZGroup = new THREE.Group();
-let lightGroup = new THREE.Group();
-let lightHelperGroup = new THREE.Group();
+let tileXZGroup = new THREE.Group(); tileXZGroup.name = "tileXZGroup";
+let tileXYGroup = new THREE.Group(); tileXYGroup.name = "tileXYGroup";
+let tileYZGroup = new THREE.Group(); tileYZGroup.name = "tileYZGroup";
+let lightGroup = new THREE.Group(); lightGroup.name = "lightGroup";
+let lightHelperGroup = new THREE.Group(); lightHelperGroup.name = "lightHelperGroup";
 
 const numPlat = 8
 const numPlatToTheLeft = 4
@@ -176,7 +184,17 @@ let animDict = {}; //meshes dictionary
 // let matArray = []; //material array (from dictionary)
 let atlasArray = []; //material array (from dictionary)
 let atlasMat;
+let atlasUVs;
 let defaultGeom;
+let markerGeom;
+
+let bakedGeometry;
+
+//any new geometry/uv generate a new draw call
+//optimize it by tracking the already used geometry+uv ones
+let geometryCache = {};
+geometryCache["Plane"] = {};
+
 // let atlasTex;
 // let currentMatIndex = 1;
 // let currentMat = null;
@@ -249,6 +267,7 @@ let gameActionToKeyMap = {
     nextMaterial: { key: 'KeyE', OnPress: true },
     forceGameOver: { key: 'KeyO', OnPress: true },
     saveLevel: { key: 'KeyT', OnPress: true },
+    bakeLevel: { key: 'KeyB', OnPress: true },
     loadLevel: { key: 'KeyL', OnPress: true },
     startGame: { key: 'KeyG', OnPress: true },
 };
@@ -299,9 +318,9 @@ const cellSize = gridSize / gridDivisions; //TODO: when not 1 this will break (m
 if (cellSize != 1) {
     throw new Error("cellsize", cellSize, "different from 1, this is not supported currently");
 }
-const floorGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+const floorGeo = new THREE.PlaneGeometry(gridSize, gridSize); floorGeo.name = "floorGeo";
 // const floorMat = new THREE.MeshBasicMaterial(); // invisible
-const floorMat = new THREE.MeshBasicMaterial({ visible: false }); // invisible
+const floorMat = new THREE.MeshBasicMaterial({ visible: false, name: "floorMat" }); // invisible
 const floor = new THREE.Mesh(floorGeo, floorMat);
 floor.name = "floor";
 
@@ -309,6 +328,7 @@ floor.name = "floor";
 const raycaster = new THREE.Raycaster();
 const screenCenter = new THREE.Vector2(0, 0); // Center of screen in NDC (Normalized Device Coordinates)
 
+let loadingTile;
 //marker materials
 // const markerxzmaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
 // const markeryzmaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
@@ -337,9 +357,11 @@ const axesHelper = new THREE.AxesHelper(2);
 
 // FPS-style rotation system
 const pitchObject = new THREE.Object3D(); // Up/down rotation (X axis)
+pitchObject.name = "pitchObject";
 pitchObject.add(camera);
 
 const yawObject = new THREE.Object3D();   // Left/right rotation (Y axis)
+yawObject.name = "yawObject";
 yawObject.add(pitchObject);
 // Add yawObject to scene instead of camera directly
 const pointLight = new THREE.PointLight(new THREE.Vector3(0, 0, 0), 1, 100);
@@ -401,6 +423,7 @@ const LoadBtn = document.getElementById('LoadBtn');
 const LoadBtnTxt = document.getElementById('LoadBtnText');
 const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 const SaveBtn = document.getElementById('SaveBtn');
+const BakeBtn = document.getElementById('BakeBtn');
 const ResetBtn = document.getElementById('ResetBtn');
 const StartBtn = document.getElementById('StartBtn');
 
@@ -427,6 +450,7 @@ AddLBtn.addEventListener('click', () => {
 });
 LoadBtn.addEventListener('click', () => { loadLevel(); });
 SaveBtn.addEventListener('click', () => { saveLevel(); });
+BakeBtn.addEventListener('click', () => { bakeLevel(); });
 ResetBtn.addEventListener('click', () => { resetLevel(); });
 StartBtn.addEventListener('click', () => {
     toggleGameMode();
@@ -543,8 +567,33 @@ setupAndStartGame();
 // SETUP AND START GAME function
 /*-----------------------------------------------------*/
 
+let meshMap = {};
 async function setupAndStartGame() {
     try {
+
+        //test load glb
+        // const loader = new GLTFLoader();
+        // loader.load('assets/Meshes.glb', (gltf) => {
+        //     const scene = gltf.scene;
+
+        //     // Object to store meshes by name
+
+        //     scene.traverse((child) => {
+        //         if (child.isMesh) {
+        //             meshMap[child.name] = child;
+        //         }
+        //     });
+
+        //     console.log(meshMap);
+        //     // Now you can access meshMap['Plane'], meshMap['Sphere'], etc.
+        //     // scene.add(meshMap["Sphere"]);
+        // });
+
+
+
+
+
+
 
         // console.log("HELLOWORLD");  
 
@@ -552,14 +601,42 @@ async function setupAndStartGame() {
         resourcesDict = await loadResourcesFromJson('resources.json');
         matDict = resourcesDict.IMAGES;
         atlasDict = resourcesDict.ATLAS.ATLAS0;
-        atlasMat = atlasDict.CHECKER.material;
+        atlasMat = atlasDict.ATLASMATERIAL;
+        atlasUVs = atlasDict.UVS;
         // atlasTex = atlasMat.map;
         // matArray = Object.entries(matDict);
-        atlasArray = Object.entries(atlasDict);
+        atlasArray = Object.entries(atlasUVs);
         charaDict = resourcesDict.MESHES.CHARA;
         animDict = charaDict.ANIMATIONS;
 
-        defaultGeom = 'WALL' in atlasDict ? atlasDict.WALL.geometry : Object.values(atlasDict)[0];
+        // defaultGeom = 'WALL' in atlasDict ? atlasDict.WALL.geometry : Object.values(atlasDict)[0];
+        defaultGeom = new THREE.PlaneGeometry(1, 1);
+        markerGeom = defaultGeom.clone();
+
+        // let s = meshMap["Plane"];
+        // s.material = atlasMat;
+        // // const tilesPerRow = 8;
+        // // const tilesPerCol = 8;
+        // const tilesPerRow = 8;
+        // const tilesPerCol = 8;
+        // const uvScaleX = 1 / tilesPerRow; // 0.125
+        // const uvScaleY = 1 / tilesPerCol; // 0.125
+        // const offsetX = 1 * uvScaleX;
+        // const offsetY = 5 * uvScaleY;
+        // const uv = s.geometry.attributes.uv;
+        // for (let i = 0; i < uv.count; i++) {
+        //     let x = uv.getX(i);
+        //     let y = uv.getY(i);
+        //     // Scale down to tile size
+        //     x = x * uvScaleX;
+        //     y = y * uvScaleY;
+        //     // Offset to desired tile
+        //     x += offsetX;
+        //     y += offsetY;
+        //     uv.setXY(i, x, y);
+        // }
+        // uv.needsUpdate = true;
+        // scene.add(s);
 
         //start in add plane mode
         setAddMode(ADDPLANEMODE);
@@ -577,23 +654,30 @@ async function setupAndStartGame() {
 
 
         markerxzmaterial = atlasMat.clone();
-        Object.assign(markerxzmaterial, { side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+        markerxzmaterial.name = "markerxzmaterial";
+        // Object.assign(markerxzmaterial, { side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+        //TEMP: a transparent plane adds 2 draw calls per plane instead of 1.
+        Object.assign(markerxzmaterial, { side: THREE.DoubleSide, transparent: false, opacity: 0.5 });
         markerxzmaterial.color.set(0xff0000);
         markeryzmaterial = markerxzmaterial.clone();
         markeryzmaterial.color.set(0x00ff00);
+        markeryzmaterial.name = "markeryzmaterial";
         markerxymaterial = markerxzmaterial.clone();
         markerxymaterial.color.set(0x0000ff);
+        markerxymaterial.name = "markerxymaterial";
         markerremovematerial = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+        markerremovematerial.name = "markerremovematerial";
 
         //selected cell
         //XZ : horizontal plane, RED
-        markergroupxz = new THREE.Group();
+        markergroupxz = new THREE.Group(); markergroupxz.name = "markergroupxz";
         markergroupxz.visible = false;
         markerxz = new THREE.Mesh(
             // new THREE.PlaneGeometry(cellSize, cellSize),
             // atlasDict.WALL.geometry,//TODO, this is 1,1 not cellsize, maybe rescale here?
-            defaultGeom,
-            markerxzmaterial
+            markerGeom,
+            markerxzmaterial,
+            name = "markerxz"
         );
         markerxz.position.set(0.5, 0, 0.5);
         markerxz.rotation.x = Math.PI / 2;
@@ -601,14 +685,21 @@ async function setupAndStartGame() {
         scene.add(markergroupxz);
         markergroupxz.visible = showMarkerXZ;
         markergroupxzDict = new Map();
+        // setUVsByName(defaultGeom,"WALL");
+        // setUVsByName(defaultGeom,0,7);
+        // setUVsByName(defaultGeom,0,7);
+        // setUVs(markerxz.geometry.attributes.uv,0,7);
+        // setUVsByName(markerxz.geometry.attributes.uv,"WALL");
+        setUVsByName(markerGeom, "WALL");
 
         //YZ : left plane, GREEN
-        markergroupyz = new THREE.Group();
+        markergroupyz = new THREE.Group(); markergroupyz.name = "markergroupyz";
         markeryz = new THREE.Mesh(
             // atlasDict.WALL.geometry,
-            defaultGeom,
+            markerGeom,
             // new THREE.PlaneGeometry(cellSize, cellSize),
-            markeryzmaterial
+            markeryzmaterial,
+            name = "markeryz"
         );
         markeryz.position.set(0, 0.5, 0.5);//relative x,y,z
         markeryz.rotation.y = Math.PI / 2;//plane starts with z normal (facing you)
@@ -616,20 +707,24 @@ async function setupAndStartGame() {
         scene.add(markergroupyz);
         markergroupyz.visible = showMarkerYZ;
         markergroupyzDict = new Map();
+        // setUVsByName(markeryz.geometry.attributes.uv,"WALL");
 
         //XY : front plane, BLUE
-        markergroupxy = new THREE.Group();
+        markergroupxy = new THREE.Group(); markergroupxy.name = "markergroupxy";
         markerxy = new THREE.Mesh(
             // atlasDict.WALL.geometry,
-            defaultGeom,
+            markerGeom,
             // new THREE.PlaneGeometry(cellSize, cellSize),
-            markerxymaterial
+            markerxymaterial,
+            name = "markerxy"
         );
         markerxy.position.set(0.5, 0.5, 0);//in scene gizmo: x red axis, y green axis, z blue axis
         markergroupxy.add(markerxy.clone());
         scene.add(markergroupxy);
         markergroupxy.visible = showMarkerXY;
         markergroupxyDict = new Map();
+        // setUVsByName(markerxy.geometry.attributes.uv,"WALL");
+        // setUVsByName(defaultGeom,0,7);
 
 
         //setup marker materials
@@ -878,41 +973,130 @@ function prevMaterial() {
     toggleMaterial(-1);
 }
 
+function setUVsByName(geom, uvname) {
+    const tilecoordx = (atlasUVs[uvname]?.x || 0);
+    const tilecoordy = (atlasUVs[uvname]?.y || 0);
+    setUVs(geom, tilecoordx, tilecoordy, uvname);
+}
+
+function setUVs(geom, xt, yt, name) {
+
+    // const geomName=mesh.geometry.name;
+    // if (!geometryCache[geomName]){
+    //     geometryCache[geomName]={};
+    // } else{
+    //     if (geometryCache[geomName][uvname] !== undefined){
+    //         mesh.geometry=geometryCache[geomName][uvname];
+    //         return;
+    //     } else {
+    //         geometryCache[geomName][uvname] = mesh.geometry;
+    //     }
+    // }
+
+    let uv = defaultGeom.attributes.uv.clone();//reinit the uvs
+    // let uv = mesh.geometry.attributes.uv;
+
+    const tilesPerRow = atlasDict?.NUMX || 8;
+    const tilesPerCol = atlasDict?.NUMY || 8;
+    const scalex = 1 / tilesPerRow; // 0.125
+    const scaley = 1 / tilesPerCol; // 0.125
+
+    const offsetX = xt * scalex;
+    const offsetY = yt * scaley;
+    // const offsetX = (currentGeomIndex%tilesPerRow) * uvScaleX;
+    // const offsetY = (tilesPerCol-Math.floor(currentGeomIndex/tilesPerRow)) * uvScaleY;
+    // const uv = markerxz.geometry.attributes.uv;
+    for (let i = 0; i < uv.count; i++) {
+        let x = uv.getX(i);
+        let y = uv.getY(i);
+        // Scale down to tile size
+        x = x * scalex;
+        y = y * scaley;
+        // Offset to desired tile
+        x += offsetX;
+        y += offsetY;
+        uv.setXY(i, x, y);
+    }
+    uv.needsUpdate = true;
+
+    // Make sure UVs are an independent BufferAttribute
+    geom.name = name;
+    geom.setAttribute('uv', uv);
+
+}
+
 function toggleMaterial(increment) {
     // reinitMarker();
     let l = atlasArray.length;
     currentGeomIndex = (((currentGeomIndex + increment) % l) + l) % l;
-    currentGeom = atlasArray[currentGeomIndex][1].geometry;
+    // currentGeom = atlasArray[currentGeomIndex][1].geometry;
     // let currentTex = currentMat.map;
     // let currentName = currentMat.name;
-    markerxz.geometry = currentGeom;
-    markeryz.geometry = currentGeom;
-    markerxy.geometry = currentGeom;
+    let currentName = atlasArray[currentGeomIndex][0];
+
+    // const uv = markerxz.geometry.attributes.uv;
+    // setMaterial(markerGeom,currentName);
+    setUVsByName(markerGeom, currentName);
     reinitMarker();
-
-    // markerxz.geometry.attributes.uv.needsUpdate=true;
-    // console.log(markerxz.geometry.attributes.uv.array);
-    // markerxz
-    // markerxzmaterial.map = currentTex;
-    // markeryzmaterial.map = currentTex;
-    // markerxymaterial.map = currentTex;
-    // markerxzmaterial.name = currentName;
-    // markeryzmaterial.name = currentName;
-    // markerxymaterial.name = currentName;
-
-
-    // let l = matArray.length;
-    // currentMatIndex = (((currentMatIndex + increment) % l) + l) % l;
-    // currentMat = matArray[currentMatIndex][1];
-    // let currentTex = currentMat.map;
-    // let currentName = currentMat.name;
-    // markerxzmaterial.map = currentTex;
-    // markeryzmaterial.map = currentTex;
-    // markerxymaterial.map = currentTex;
-    // markerxzmaterial.name = currentName;
-    // markeryzmaterial.name = currentName;
-    // markerxymaterial.name = currentName;
 }
+
+// function setMaterial(geom,name){
+//     const tilecoordx = (atlasUVs[name].x);
+//     const tilecoordy = (atlasUVs[name].y);
+//     // const tilecoordx = (atlasArray[currentGeomIndex][1].x);
+//     // const tilecoordy = (atlasArray[c urrentGeomIndex][1].y);
+//     setUVs(geom, tilecoordx, tilecoordy, name);
+//     // markerGeom.name = currentName;
+//     // setUVs(markeryz.geometry, tilecoordx, tilecoordy);
+//     // setUVs(markerxy.geometry, tilecoordx, tilecoordy);
+
+//     // markerxz.geometry = currentGeom;
+//     // markeryz.geometry = currentGeom;
+//     // markerxy.geometry = currentGeom;
+
+//     // const offsetX = tilecoordx * uvScaleX;
+//     // const offsetY = tilecoordy * uvScaleY;
+//     // // const offsetX = (currentGeomIndex%tilesPerRow) * uvScaleX;
+//     // // const offsetY = (tilesPerCol-Math.floor(currentGeomIndex/tilesPerRow)) * uvScaleY;
+//     // const uv = markerxz.geometry.attributes.uv;
+//     // for (let i = 0; i < uv.count; i++) {
+//     //     let x = uv.getX(i);
+//     //     let y = uv.getY(i);
+//     //     // Scale down to tile size
+//     //     x = x * uvScaleX;
+//     //     y = y * uvScaleY;
+//     //     // Offset to desired tile
+//     //     x += offsetX;
+//     //     y += offsetY;
+//     //     uv.setXY(i, x, y);
+//     // }
+//     // uv.needsUpdate = true;
+
+//     reinitMarker();
+
+//     // markerxz.geometry.attributes.uv.needsUpdate=true;
+//     // console.log(markerxz.geometry.attributes.uv.array);
+//     // markerxz
+//     // markerxzmaterial.map = currentTex;
+//     // markeryzmaterial.map = currentTex;
+//     // markerxymaterial.map = currentTex;
+//     // markerxzmaterial.name = currentName;
+//     // markeryzmaterial.name = currentName;
+//     // markerxymaterial.name = currentName;
+
+
+//     // let l = matArray.length;
+//     // currentMatIndex = (((currentMatIndex + increment) % l) + l) % l;
+//     // currentMat = matArray[currentMatIndex][1];
+//     // let currentTex = currentMat.map;
+//     // let currentName = currentMat.name;
+//     // markerxzmaterial.map = currentTex;
+//     // markeryzmaterial.map = currentTex;
+//     // markerxymaterial.map = currentTex;
+//     // markerxzmaterial.name = currentName;
+//     // markeryzmaterial.name = currentName;
+//     // markerxymaterial.name = currentName;
+// }
 
 
 function onMouseMove(event) {
@@ -1049,6 +1233,7 @@ function placeTile(tile, gridmap, group) {
             tiletoremove.geometry.dispose();
             tiletoremove.material.dispose();
         }
+        gridmap.delete(key);
     }
 
     //if eraser mode we finished our work here
@@ -1058,12 +1243,31 @@ function placeTile(tile, gridmap, group) {
 
     //otherwise add tile now
     // console.log(worldPos);
+    uniquifyGeometry(tile);
     group.add(tile); // This automatically removes it from sourceGroup
     tile.position.copy(worldPos);
     gridmap.set(key, tile);
 
     // return tile;
 
+}
+
+function uniquifyGeometry(mesh) {
+    // clone the geometry to avoid having all meshes changing uvs with marker
+    const originalGeom = mesh.geometry;
+    const newGeom = mesh.geometry.clone();
+
+    // still share the original vertex attributes like position/normal/index to minimize memory footprint
+    newGeom.setAttribute('position', originalGeom.getAttribute('position'));
+    newGeom.setAttribute('normal', originalGeom.getAttribute('normal'));
+    newGeom.setIndex(originalGeom.getIndex());
+
+    // Optional: explicitly clone UVs to be extra safe
+    // if (mesh.geometry.attributes.uv) {
+    //     newGeom.setAttribute('uv', mesh.geometry.attributes.uv.clone());
+    // }
+
+    mesh.geometry = newGeom;
 }
 
 // function createTile() {
@@ -1186,7 +1390,6 @@ function onMouseUp(event) {
     //     let m = searchGroup.material.name;
     //     materialToApply = matDict[m];
     // }
-
     if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, gridMapXY, materialToApply);
     if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, gridMapXZ, materialToApply);
     if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, gridMapYZ, materialToApply);
@@ -1325,6 +1528,7 @@ function movePlayer(delta) {
     if (gameActions.nextMaterial) nextMaterial();
     if (gameActions.prevMaterial) prevMaterial();
     if (gameActions.saveLevel) saveLevel();
+    if (gameActions.bakeLevel) bakeLevel();
     if (gameActions.loadLevel) loadLevel();
     if (gameActions.startGame) {
         toggleGameMode();
@@ -1632,6 +1836,8 @@ function editorLoop() {
             renderer.setViewport(0, 0, container.clientWidth, container.clientHeight);
             renderer.clear();
             renderer.render(scene, camera);
+            // console.log("draw calls main scene", renderer.info.render.calls);
+            drawcalls = renderer.info.render.calls;
 
             // 2. Render mini viewport (e.g., bottom-left corner)
             const vpSize = 100;
@@ -1641,6 +1847,8 @@ function editorLoop() {
             // renderer.clear();
             renderer.clearDepth();
             renderer.render(axesScene, axesCamera);
+            // console.log("draw calls mini viewport", renderer.info.render.calls);
+            drawcalls += renderer.info.render.calls;
 
             // 3. Reset to full canvas
             // renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
@@ -1654,6 +1862,9 @@ function editorLoop() {
 
         } else {
             renderer.render(scene, camera);
+            // console.log("draw calls main scene", renderer.info.render.calls);
+            drawcalls = renderer.info.render.calls;
+            renderer.info.reset(); //it auto resets normally
         }
 
         // Simulate heavy computation
@@ -1666,6 +1877,7 @@ function editorLoop() {
         stats.end();
     }
 
+    // console.log("draw calls1", renderer.info.render.calls);
     // if (!gameOver) {
     editorId = requestAnimationFrame(editorLoop); //call animate recursively on next frame 
     // }
@@ -1770,9 +1982,11 @@ function createScene() {
     //helper grid
 
     grid = new THREE.GridHelper(gridSize, gridDivisions);
+    grid.name = "GridHelper";
     scene.add(grid);
     //helper gizmo
     axes = new THREE.AxesHelper(3); // size
+    axes.name = "AxesHelper";
     scene.add(axes);
 
     //raycast floor
@@ -2002,6 +2216,13 @@ async function loadPlanesIntoScene(jsondata) {
     // console.log(totalElements);
     // return;
 
+    //this tile will be cloned during load
+    loadingTile = new THREE.Mesh(
+        markerGeom,
+        atlasMat,
+        // name = "markerxz"
+    );
+
     await loadPlaneIntoScene(jsondata, "XY", gridMapXY, markerxy, tileXYGroup);
     await loadPlaneIntoScene(jsondata, "XZ", gridMapXZ, markerxz, tileXZGroup);
     await loadPlaneIntoScene(jsondata, "YZ", gridMapYZ, markeryz, tileYZGroup);
@@ -2033,14 +2254,22 @@ async function loadPlaneIntoScene(jsondata, label, grid, marker, group) {
         const jsonplanedata = jsondata[label];
         for (const geomName in jsonplanedata) {
             const planes = jsonplanedata[geomName];
-            const material = atlasMat;
-            const tiletoclone = atlasDict[geomName];
-
+            const tiletoclone = loadingTile;
+            // const material = atlasMat;
+            // const tiletoclone = atlasDict[geomName];
+            // const tiletoclone = defaultGeom;
+            // const tiletoclone = new THREE.Mesh(
+            //     defaultGeom.clone(),
+            //     atlasMat,
+            //     // name = "markerxz"
+            // );
+            // const tiletoclone = markerxy;
             for (const data of planes) {
                 const tile = tiletoclone.clone();
                 tile.position.fromArray(data.position);
                 tile.rotation.copy(marker.rotation);
-                tile.material = material;
+                // tile.material = material;
+                setUVsByName(tile.geometry, geomName);
                 placeTile(tile, grid, group);
                 loadedElements++;
 
@@ -2105,6 +2334,31 @@ function updateLoadProgression(ratio) {
         // renderOneFrame = true;
 
     }
+}
+
+function bakeLevel() {
+    console.log("BAKELEVEL");
+    bakeGroup(tileXYGroup);
+    bakeGroup(tileYZGroup);
+    bakeGroup(tileXZGroup);
+    // tileXZGroup.visible=false;//temp to test
+}
+
+function bakeGroup(group) {
+    const tileGeometries = [];
+    group.children.forEach(plane => {
+        // Clone geometry to avoid modifying original
+        const geom = plane.geometry.clone();
+
+        // Apply world matrix of the mesh to geometry
+        geom.applyMatrix4(plane.matrixWorld);
+
+        tileGeometries.push(geom);
+    });
+    bakedGeometry = mergeBufferGeometries(tileGeometries, false);
+    const mesh = new THREE.Mesh(bakedGeometry, atlasMat);
+    scene.add(mesh);
+    group.clear();
 }
 
 function saveLevel() {
@@ -2305,6 +2559,7 @@ function updateTextStatsThrottled() {
         lastFrameTime = now;
         document.getElementById('fps').textContent = fps;
     }
+    document.getElementById('drawCalls').textContent = drawcalls;
 
     //update other stats requiring scene traversal every statsUpdateInterval
     if (now - lastStatsUpdate < statsUpdateInterval) return;
@@ -2350,7 +2605,31 @@ function updateTextStats() {
     const mem = renderer.info.memory;
     document.getElementById('geometryCount').textContent = mem.geometries;
     document.getElementById('textureCount').textContent = mem.textures;
+    console.log("Unique BufferAttributes in scene:", countBufferAttributes(scene));
+    // renderer.info.reset(); //it auto resets normally
 }
+
+function countBufferAttributes(scene) {
+    const attributes = new Set();
+
+    scene.traverse(obj => {
+        if (obj.isMesh && obj.geometry && obj.geometry.attributes) {
+            const geom = obj.geometry;
+            // Position / normal / uv / etc
+            for (const key in geom.attributes) {
+                attributes.add(geom.attributes[key]);
+            }
+            // Index buffer
+            if (geom.index) {
+                attributes.add(geom.index);
+            }
+        }
+    });
+
+    return attributes.size;
+}
+
+
 
 
 function simulateBlockingWait(durationMs) {
@@ -2391,8 +2670,8 @@ function startEditorLoop() {
     markerxzmaterial.visible = true;
     markerxymaterial.visible = true;
     markerremovematerial.visible = true;
-    grid.visible = true;
-    axes.visible = true;
+    grid.visible = true;//temp
+    axes.visible = true;//temp
     lightHelperGroup.visible = true;
 }
 
@@ -2583,6 +2862,7 @@ function gameLoop() {
         // renderer.clear();
         // renderer.setScissorTest(false);
         renderer.render(scene, camera);
+        drawcalls = renderer.info.render.calls;
         updateTextStatsThrottled();
         stats.end();
     }
