@@ -52,6 +52,11 @@
             "url": "assets/atlas_512x512_18x64x64_nopad.json"
         }
     },
+    "MESHATLAS": {
+        "ATLAS0": {
+            "url": "assets/Meshes.glb"
+        }
+    },
     "MESHES": {
         "CHARA": {
             "url": "https://raw.githubusercontent.com/Remi077/miniPlatformGame/main/assets/Ty.fbx",
