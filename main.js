@@ -606,8 +606,8 @@ async function setupAndStartGame() {
         // atlasTex = atlasMat.map;
         // matArray = Object.entries(matDict);
         atlasArray = Object.entries(atlasUVs);
-        charaDict = resourcesDict.MESHES.CHARA;
-        animDict = charaDict.ANIMATIONS;
+        // charaDict = resourcesDict.MESHES.CHARA;
+        // animDict = charaDict.ANIMATIONS;
 
         // defaultGeom = 'WALL' in atlasDict ? atlasDict.WALL.geometry : Object.values(atlasDict)[0];
         defaultGeom = new THREE.PlaneGeometry(1, 1);
