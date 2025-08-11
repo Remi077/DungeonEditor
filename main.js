@@ -598,7 +598,11 @@ async function setupAndStartGame() {
         // console.log("HELLOWORLD");  
 
         // load all resources into dictionaries from JSON
-        resourcesDict = await loadResourcesFromJson('resources.json');
+        let online=true;
+        if (online)
+            resourcesDict = await loadResourcesFromJson('resourcesonline.json');
+        else
+            resourcesDict = await loadResourcesFromJson('resources.json');
         matDict = resourcesDict.IMAGES;
         atlasDict = resourcesDict.ATLAS.ATLAS0;
         atlasMat = atlasDict.ATLASMATERIAL;
