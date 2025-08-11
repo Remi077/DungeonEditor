@@ -1,7 +1,9 @@
+
 // myFunctions.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
 // import * as FBX from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/FBXLoader.js';
 import { FBXLoader } from './FBXLoader.js'
+import { GLTFLoader } from './GLTFLoader.js'
 
 //TEXT SPRITE
 
@@ -214,14 +216,14 @@ export function createLight(pos, range = 100, intensity = 1, color = 0xffffff, h
     // Set position from passed Vector3
     pointLight.position.copy(pos);  // ✅ use copy() to assign from a Vector3
 
-    let lightHelper=null;
+    let lightHelper = null;
     if (helper) {
         // Optional: add helper to visualize light
         lightHelper = new THREE.PointLightHelper(pointLight, 0.5);
         // scene.add(lightHelper);
     }
 
-    return {light: pointLight, helper: lightHelper};
+    return { light: pointLight, helper: lightHelper };
 }
 
 /* updateAnimations */
@@ -261,6 +263,9 @@ export function loadResources(jsonData) {
         } else if (key == "ATLAS") {
             //load atlas
             return loadAtlases(data).then(result => [key, result]);
+        } else if (key == "MESHATLAS") {
+            //load mesh atlas
+            return loadMeshAtlases(data).then(result => [key, result]);
         } else if (key == "MESHES") {
             //load meshes
             return loadMeshes(data).then(result => [key, result]);
@@ -321,7 +326,9 @@ function loadAtlas(jsonUrl) {
         // const material = new THREE.MeshBasicMaterial({
         const material = new THREE.MeshLambertMaterial({
             map: texture,
-            transparent: true,
+            // transparent: true, //TEMP: a transparent plane adds 2 draw calls per plane instead of 1.
+            transparent: false,
+            name:"ATLASMATERIAL",
             side: THREE.DoubleSide, // To show the sprite from both sides if needed
         });
 
@@ -330,10 +337,22 @@ function loadAtlas(jsonUrl) {
 
         const planes = {};
 
-        for (const [name, frame] of Object.entries(atlasData)) {
+        planes["ATLASMATERIAL"] = material;
+        planes["SIZE"] = atlasData["SIZE"];
+        planes["NUMX"] = atlasData["NUMX"];
+        planes["NUMY"] = atlasData["NUMY"];
+        planes["UVS"]={};
+
+        let images=atlasData["IMAGES"];
+        for (const [name, frame] of Object.entries(images)) {
+
+
 
             // Remove extension and convert to uppercase
             const displayName = name.replace(/\.[^/.]+$/, '').toUpperCase();
+
+
+            /*
             const geometry = new THREE.PlaneGeometry(1, 1);//TODO: need to pass cellsize?
 
             // Compute UVs from atlas coordinates
@@ -343,12 +362,14 @@ function loadAtlas(jsonUrl) {
             const v1 = 1 - frame.y / atlasHeight;
 
             // Set custom UVs to match the sub-region of the atlas
-            const uvs = geometry.attributes.uv;
+
             uvs.setXY(0, u0, v1); // bottom-left
             uvs.setXY(1, u1, v1); // bottom-right
             uvs.setXY(2, u0, v0); // top-left
             uvs.setXY(3, u1, v0); // top-right
             uvs.needsUpdate = true;
+
+            const uvs = geometry.attributes.uv;
 
             // Adjust plane size to match sprite aspect ratio (optional)
             const mesh = new THREE.Mesh(geometry, material);
@@ -357,6 +378,11 @@ function loadAtlas(jsonUrl) {
             // mesh.scale.set(frame.width / 64, frame.height / 64, 1); // normalize to 1x1 unit
 
             planes[displayName] = mesh;
+            */
+           planes["UVS"][displayName]={
+            x: frame.x,
+            y: frame.y
+           };
         }
 
         return planes;
@@ -402,10 +428,51 @@ export function loadImage(src) {
     });
 }
 
+export function loadMeshAtlases(jsonData) {
+    const loader = new GLTFLoader();
+    const loadPromises = Object.entries(jsonData).map(([key, data]) => {
+        if (!data || !data.url) {
+            console.warn(`Skipping entry with missing 'url' for key: ${key}`);
+            return Promise.resolve([key, null]); // Return null for missing or invalid data
+        }
+        // return null;
+        return loadMeshAtlas(loader, data.url).then(meshes => {
+            return [key, meshes]; // Return the texture
+        });
+    });
+    // Wait for all images to load and return the results
+    return Promise.all(loadPromises).then(results => {
+        return Object.fromEntries(results); // Convert back to a dictionary { key: sprite/texture }
+    });
+}
+
+export function loadMeshAtlas(loader, src) {
+    return new Promise((resolve, reject) => {
+        loader.load(
+            src,
+            (gltf) => {
+                const scene = gltf.scene;
+                const meshMap = {};
+
+                scene.traverse((child) => {
+                    if (child.isMesh) {
+                        meshMap[child.name] = child;
+                    }
+                });
+
+                resolve(meshMap); // resolves AFTER traversal is done
+            },
+            undefined, // onProgress
+            (error) => reject(error)
+        );
+    });
+}
+
+
 /* loadMeshes */
 // Function to load all meshes and create objects based on type and data from JSON
 export function loadMeshes(jsonData) {
-    const loader = new FBXLoader();
+    const loader = new FBXLoader();//TODO: change to gltf, smaller and faster
     const loadPromises = Object.entries(jsonData).map(([key, data]) => {
         if (!data || !data.url) {
             console.warn(`Skipping entry with missing 'url' for key: ${key}`);
