@@ -1,0 +1,380 @@
+
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+import {GLTFLoader} from './utils/GLTFLoader.js'
+import {FBXLoader} from './utils/FBXLoader.js'
+//OTHER IMPORTS FORBIDDEN
+
+/*---------------------------------------------------------*/
+/* loadResourcesFromJson */
+/* load resources from JSON and place them in a dictionary */
+/*---------------------------------------------------------*/
+export function loadResourcesFromJson(jsonPath) {
+    return fetch(jsonPath)
+        .then(response => response.json()) // Parse JSON
+        .then(jsonData => {
+            console.log('Loaded JSON data:', jsonData);
+            // Use the data (which contains the URL, scale, type, etc.) 
+            // to load the resources and create objects.
+            // return all resources in a dictionary
+            const result = loadResources(jsonData);
+            console.log('Parsed JSON data');
+            return result;
+        }).catch(error => {
+            console.error('Error loading JSON:', error);
+            throw error; // Re-throw the error for upstream handling
+        });
+}
+
+/*---------------------------------------------------------*/
+/* loadResources */
+/* load resources from JSON Data*/
+/*---------------------------------------------------------*/
+function loadResources(jsonData) {
+    const loadPromises = Object.entries(jsonData).map(([key, data]) => {
+        if (key == "IMAGES") {
+            //load images
+            return loadImages(data).then(result => [key, result]);
+        } else if (key == "ATLAS") {
+            //load atlas
+            return loadAtlases(data).then(result => [key, result]);
+        } else if (key == "MESHATLAS") {
+            //load mesh atlas
+            return loadMeshAtlases(data).then(result => [key, result]);
+        } else if (key == "MESHES") {
+            //load meshes
+            return loadMeshes(data).then(result => [key, result]);
+        } else {
+            console.warn(`key entry: ${key} is not supported`);
+            return Promise.resolve([key, null]); // Return null for missing or invalid data
+        }
+    });
+    return Promise.all(loadPromises).then(results => {
+        return Object.fromEntries(results); // Convert back to a dictionary
+    });
+}
+
+
+/*---------------------------------------------------------*/
+/* loadAtlases */
+/* Function to load all images and create objects based on type and data from JSON */
+/*---------------------------------------------------------*/ 
+function loadAtlases(jsonData) {
+    const loadPromises = Object.entries(jsonData).map(([key, data]) => {
+        if (!data || !data.url) {
+            console.warn(`Skipping entry with missing 'url' for key: ${key}`);
+            return Promise.resolve([key, null]); // Return null for missing or invalid data
+        }
+        // return null;
+        return loadAtlas(data.url).then(planes => {
+            return [key, planes]; // Return the texture
+        });
+    });
+    // Wait for all images to load and return the results
+    return Promise.all(loadPromises).then(results => {
+        return Object.fromEntries(results); // Convert back to a dictionary { key: sprite/texture }
+    });
+}
+
+/*---------------------------------------------------------*/
+/* loadAtlas */
+/* Load JSON atlas and corresponding image */
+/*---------------------------------------------------------*/
+function loadAtlas(jsonUrl) {
+    const imageUrl = jsonUrl.replace('.json', '.png');
+
+    return Promise.all([
+        fetch(jsonUrl).then(res => res.json()),
+        new THREE.TextureLoader().loadAsync(imageUrl),
+    ]).then(([atlasData, texture]) => {
+
+        texture.magFilter = THREE.NearestFilter;
+        // texture.minFilter = THREE.NearestFilter; // optional, if you also want it on minification
+        texture.needsUpdate = true;
+
+        // const material = new THREE.MeshBasicMaterial({
+        const material = new THREE.MeshLambertMaterial({
+            map: texture,
+            // transparent: true, //TEMP: a transparent plane adds 2 draw calls per plane instead of 1.
+            transparent: false,
+            name: "ATLASMATERIAL",
+            side: THREE.DoubleSide, // To show the sprite from both sides if needed
+        });
+
+        const atlasWidth = texture.image.width;
+        const atlasHeight = texture.image.height;
+
+        const planes = {};
+
+        planes["ATLASMATERIAL"] = material;
+        planes["SIZE"] = atlasData["SIZE"];
+        planes["NUMX"] = atlasData["NUMX"];
+        planes["NUMY"] = atlasData["NUMY"];
+        planes["UVS"] = {};
+
+        let images = atlasData["IMAGES"];
+        for (const [name, frame] of Object.entries(images)) {
+
+            // Remove extension and convert to uppercase
+            const displayName = name.replace(/\.[^/.]+$/, '').toUpperCase();
+
+            planes["UVS"][displayName] = {
+                x: frame.x,
+                y: frame.y
+            };
+        }
+
+        return planes;
+    });
+}
+
+
+/*---------------------------------------------------------*/
+/* loadImages */
+/* Function to load all images and create objects based on type and data from JSON */
+/*---------------------------------------------------------*/
+function loadImages(jsonData) {
+    const loadPromises = Object.entries(jsonData).map(([key, data]) => {
+        if (!data || !data.url) {
+            console.warn(`Skipping entry with missing 'url' for key: ${key}`);
+            return Promise.resolve([key, null]); // Return null for missing or invalid data
+        }
+        return loadImage(data.url).then(image => {
+            const material = createMaterial(image,
+                data.transparent ?? false,
+                data.repeat?.x ?? 1,
+                data.repeat?.y ?? 1,
+                false,
+                key
+                // data.lambert
+            );
+            return [key, material]; // Return the texture
+        });
+    });
+    // Wait for all images to load and return the results
+    return Promise.all(loadPromises).then(results => {
+        return Object.fromEntries(results); // Convert back to a dictionary { key: sprite/texture }
+    });
+}
+
+/*---------------------------------------------------------*/
+/* loadImage */
+/*---------------------------------------------------------*/
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.src = src;
+        img.onload = () => resolve(img); // Resolve promise when image is loaded
+        img.onerror = () => reject(new Error(`Failed to load image: ${src}`)); // Reject promise if there's an error
+    });
+}
+
+/*---------------------------------------------------------*/
+/* loadMeshAtlases */
+/*---------------------------------------------------------*/
+function loadMeshAtlases(jsonData) {
+    const loader = new GLTFLoader();
+    const loadPromises = Object.entries(jsonData).map(([key, data]) => {
+        if (!data || !data.url) {
+            console.warn(`Skipping entry with missing 'url' for key: ${key}`);
+            return Promise.resolve([key, null]); // Return null for missing or invalid data
+        }
+        // return null;
+        return loadMeshAtlas(loader, data.url).then(meshes => {
+            return [key, meshes]; // Return the texture
+        });
+    });
+    // Wait for all images to load and return the results
+    return Promise.all(loadPromises).then(results => {
+        return Object.fromEntries(results); // Convert back to a dictionary { key: sprite/texture }
+    });
+}
+
+/*---------------------------------------------------------*/
+/* loadMeshAtlas */
+/*---------------------------------------------------------*/
+function loadMeshAtlas(loader, src) {
+    return new Promise((resolve, reject) => {
+        loader.load(
+            src,
+            (gltf) => {
+                const scene = gltf.scene;
+                const meshMap = {};
+
+                scene.traverse((child) => {
+                    if (child.isMesh) {
+                        meshMap[child.name] = child;
+                    }
+                });
+
+                resolve(meshMap); // resolves AFTER traversal is done
+            },
+            undefined, // onProgress
+            (error) => reject(error)
+        );
+    });
+}
+
+
+/*---------------------------------------------------------*/
+/* loadMeshes */
+/* Function to load all meshes and create objects based on type and data from JSON */
+/*---------------------------------------------------------*/
+function loadMeshes(jsonData) {
+    const loader = new FBXLoader();//TODO: change to gltf, smaller and faster
+    const loadPromises = Object.entries(jsonData).map(([key, data]) => {
+        if (!data || !data.url) {
+            console.warn(`Skipping entry with missing 'url' for key: ${key}`);
+            return Promise.resolve([key, null]); // Return null for missing or invalid data
+        }
+        return loadMesh(loader, data.url, data.lit, data.animations).then(result => {
+            return [key, result]; // Return the mesh
+        });
+    });
+    // Wait for all images to load and return the results
+    return Promise.all(loadPromises).then(results => {
+        return Object.fromEntries(results); // Convert back to a dictionary { key: sprite/texture }
+    });
+}
+
+/*---------------------------------------------------------*/
+/* loadMesh */
+/*---------------------------------------------------------*/
+function loadMesh(loader, src, lit = false, animations = null) {
+    return new Promise((resolve, reject) => {
+        loader.load(
+            src,
+            (object) => {
+                // Set the material to the loaded object if necessary
+                object.traverse((child) => {
+                    if (child.isMesh) {
+                        if (child.material && !lit) {
+                            // Optional: Replace material with light-independent MeshBasicMaterial
+                            child.material = new THREE.MeshBasicMaterial({
+                                map: child.material.map // Retain the original diffuse map
+                            });
+                        }
+                    }
+                });
+                console.log(`${src} mesh loaded`);
+                resolve(object); // Resolve the promise with the loaded object
+            },
+            undefined, // Progress callback
+            (error) => {
+                console.error(`Error loading ${src}:`, error);
+                reject(error); // Reject the promise on error
+            }
+        );
+    }).then((mesh) => {
+
+        if (animations) {
+            const mixer = new THREE.AnimationMixer(mesh);
+            // Assuming loadAnimations returns a Promise
+            return loadAnimations(loader, mixer, animations).then(
+                (loadedAnimations) => {
+
+                    // Create the result object with both the mesh and animations
+                    const result = {
+                        MESH: mesh,
+                        MIXER: mixer,
+                        ANIMATIONS: loadedAnimations
+                    };
+
+                    return result; // Return the result with both MESH and ANIMATIONS
+                });
+        } else {
+
+            const result = {
+                MESH: mesh
+            };
+
+            return result; // Return the result with MESH but no ANIMATION 
+        }
+    });
+}
+
+
+/*---------------------------------------------------------*/
+/* loadAnimations */
+/*---------------------------------------------------------*/
+function loadAnimations(loader, mixer, animations) {
+    const loadPromises = Object.entries(animations).map(([key, data]) => {
+        if (!data || !data.url) {
+            console.warn(`Skipping entry with missing 'url' for key: ${key}`);
+            return Promise.resolve([key, null]); // Return null for missing or invalid data
+        }
+        return loadAnimation(loader, mixer, data.url, data.startFrame, data.endFrame, data.playRate, data.frameRate).then(result => {
+            return [key, result]; // Return the mesh
+        });
+    });
+    // Wait for all images to load and return the results
+    return Promise.all(loadPromises).then(results => {
+        return Object.fromEntries(results); // Convert back to a dictionary { key: sprite/texture }
+    });
+}
+
+/*---------------------------------------------------------*/
+/* loadAnimation */
+/*---------------------------------------------------------*/
+function loadAnimation(loader, mixer, src, startFrame, endFrame, playRate, frameRate) {
+    // Set default values if any of these parameters are undefined
+    const defaultStartFrame = 0;
+    const defaultPlayRate = 1.0; // Default playback speed
+    const defaultFrameRate = 30; // Default animation frame rate
+
+    let trim = startFrame || endFrame //does it need trimming
+    trim = false; //TODO: trimAnimationClip makes the game hang 
+    // Use the provided values or fallback to the default ones
+    startFrame = startFrame || defaultStartFrame;
+    playRate = playRate || defaultPlayRate;
+    frameRate = frameRate || defaultFrameRate;
+    const startTime = startFrame / frameRate;
+    return new Promise((resolve, reject) => {
+        loader.load(
+            src,
+            (animationFBX) => {
+                console.log(`${src} animation loaded`);
+                // Extract the animation clips from the FBX
+                const animationClip = animationFBX.animations[0]; // Assuming the first animation is what you want
+                // Add the animation clip to the mixer
+                // const action = mixer.clipAction(animationClip);
+                // If endTime is undefined, use the clip's duration as the default value
+                const endTime = endFrame ? endFrame / frameRate : animationClip.duration; // Default to the full duration of the animation clip
+                const trimmedClip = trim ?
+                    trimAnimationClip(animationClip, startTime, endTime) :
+                    animationClip;
+                const action = mixer.clipAction(trimmedClip);
+                action.setEffectiveTimeScale(playRate);
+
+                resolve(action); // Resolve the promise with the loaded object
+            },
+            undefined, // Progress callback
+            (error) => {
+                console.error(`Error loading ${src}:`, error);
+                reject(error); // Reject the promise on error
+            }
+        );
+    })
+}
+
+/*---------------------------------------------------------*/
+/* createMaterial */
+/*---------------------------------------------------------*/
+function createMaterial(image, transparent = false, wrapX = 1, wrapY = 1, lambert = false, name = '') {
+    // Create a texture from the image
+    const imageTexture = new THREE.Texture(image);
+    imageTexture.needsUpdate = true;
+    // Repeat the texture multiple times
+    imageTexture.wrapS = THREE.RepeatWrapping; // alignXizontal wrapping
+    imageTexture.wrapT = THREE.RepeatWrapping; // Vertical wrapping
+    imageTexture.repeat.set(wrapX, wrapY); // Number of times to repeat the texture (x, y)
+
+    // imageMaterial = new THREE.MeshBasicMaterial({
+    const imageMaterial = new THREE.MeshLambertMaterial({
+        map: imageTexture,
+        transparent: transparent,  // Ensure transparency is handled
+        side: THREE.DoubleSide, // To show the sprite from both sides if needed
+        name: name
+    });
+    return imageMaterial;
+}
