@@ -1,0 +1,12 @@
+{
+    "ATLAS": {
+        "ATLAS0": {
+            "url": "./assets/atlas_512x512_18x64x64_nopad.json"
+        }
+    },
+    "MESHATLAS": {
+        "ATLAS0": {
+            "url": "./assets/Meshes.glb"
+        }
+    }
+}
