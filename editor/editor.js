@@ -1,0 +1,1317 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+import * as Shared from '../shared.js';
+import * as Stats from '../Stats.js';
+import * as GameHUD from '../game/gameHUD.js';
+import {mergeBufferGeometries} from '../utils/BufferGeometryUtils.js';
+
+/*-----------------------------------------------------*/
+// EDITOR CONSTANTS
+/*-----------------------------------------------------*/
+
+// addition modes
+const ADDPLANEMODE = 0;
+const ADDLIGHTMODE = 1;
+const NUMADDMODES = 2;
+
+// tile addition modes
+const MODEXZ = 0;
+const MODEYZ = 1;
+const MODEXY = 2;
+const MODEW = 3;
+const MODEA = 4;
+const NUMMODES = 5;
+
+/*-----------------------------------------------------*/
+// GAMEPLAY GLOBAL VARIABLES
+/*-----------------------------------------------------*/
+
+let editorId = null;
+export let Actions = {};
+
+let defaultGeom;
+let markerGeom;
+let currentGeomIndex = 1;
+
+// groups holding plane tiles
+let tileXZGroup = new THREE.Group(); tileXZGroup.name = "tileXZGroup";
+let tileXYGroup = new THREE.Group(); tileXYGroup.name = "tileXYGroup";
+let tileYZGroup = new THREE.Group(); tileYZGroup.name = "tileYZGroup";
+// let tilecount = 0; //holds total number of tiles
+
+// groups holding lights and helpers
+let lightGroup = new THREE.Group(); lightGroup.name = "lightGroup";
+let lightHelperGroup = new THREE.Group(); lightHelperGroup.name = "lightHelperGroup";
+
+// selection variables
+let selectValid         = false;
+let prevSelectValid     = false;
+let selectX             = 0;
+let selectZ             = 0;
+let prevSelectX         = 99999;
+let prevSelectZ         = 99999;
+let boxselectModestartX = 0;
+let boxselectModestartZ = 0;
+let boxselectModeendX   = 0;
+let boxselectModeendZ   = 0;
+let prevWallModeSelect  = MODEA;
+let wallModeSelect      = MODEXZ;  //0: xz 1:yz 2:xy 3: walls 4: all
+let currentAddMode = ADDPLANEMODE;
+
+// marker variables
+let markerxz;
+let markeryz;
+let markerxy;
+
+let markergroupxz;
+let markergroupyz;
+let markergroupxy;
+
+let markerxzmaterial;
+let markeryzmaterial;
+let markerxymaterial;
+
+let markerremovematerial;
+
+let showMarkerXZ = true;
+let showMarkerYZ = false;
+let showMarkerXY = false;
+
+let eraserMode     = false;
+
+// holds baked geometry
+let bakedGeometry;
+let bakedMesh;
+
+/*-----------------------------------------------------*/
+// EDITOR ACTIONS TO KEY MAPPING AND REVERSE
+/*-----------------------------------------------------*/
+export let ActionToKeyMap = {
+    moveCamUp      : { key: 'ShiftLeft' },
+    moveCamDown    : { key: 'Space' },
+    moveCamRight   : { key: 'KeyD' },
+    moveCamLeft    : { key: 'KeyA' },
+    moveCamFront   : { key: 'KeyW' },
+    moveCamBack    : { key: 'KeyS' },
+    setAddPlaneMode: { key: 'Digit1', OnPress: true },
+    setAddLightMode: { key: 'Digit2', OnPress: true },
+    pause          : { key: 'KeyP', OnRelease: true },   //triggered once only at release
+    prevMaterial   : { key: 'KeyQ', OnPress: true },
+    nextMaterial   : { key: 'KeyE', OnPress: true },
+    saveLevel      : { key: 'KeyT', OnPress: true },
+    bakeLevel      : { key: 'KeyB', OnPress: true },
+    loadLevel      : { key: 'KeyL', OnPress: true },
+    startGame      : { key: 'KeyG', OnPress: true },
+};
+
+/*-----------------------------------------------------*/
+// PRELIMINARIES
+// create scene, camera and renderer
+// grid + axes helpers
+// floor object for raycast
+// mini scene for axis helper
+// camera holder
+// HUB overlay
+// clock and input listeners
+/*-----------------------------------------------------*/
+
+// grid and axes helpers
+let grid;
+let axes;
+
+// raycast floor
+const floorGeo = new THREE.PlaneGeometry(Shared.gridSize, Shared.gridSize); floorGeo.name = "floorGeo";
+const floorMat = new THREE.MeshBasicMaterial({ visible: false, name: "floorMat" }); // invisible
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.name = "floor";
+
+//raycaster
+const raycaster = new THREE.Raycaster();
+const screenCenter = new THREE.Vector2(0, 0); // Center of screen in NDC (Normalized Device Coordinates)
+
+// Mini scene for axis helper
+const axesScene = new THREE.Scene();
+axesScene.background = new THREE.Color(0x000000);
+const axesCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
+const axesHelper = new THREE.AxesHelper(2);
+
+// camera holder: FPS-style rotation system
+// pitch
+Shared.pitchObject.name = "pitchObject";
+Shared.pitchObject.add(Shared.camera);
+
+// yaw
+Shared.yawObject.name = "yawObject";
+Shared.yawObject.add(Shared.pitchObject);
+const pointLight = new THREE.PointLight(new THREE.Vector3(0, 0, 0), 1, 100);
+Shared.yawObject.add(pointLight);
+// Add Shared.yawObject to scene instead of camera directly
+Shared.scene.add(Shared.yawObject);
+
+Shared.resetCamera();
+
+// renderer
+Shared.renderer.setClearColor(0x000000, 0); // transparent background
+Shared.scene.background = new THREE.Color(0x000000);
+Shared.renderer.setSize(Shared.container.clientWidth, Shared.container.clientHeight);
+
+/*---------------------------------*/
+// setupEditor
+/*---------------------------------*/
+export function setupEditor() {
+
+    // defaultGeom = 'WALL' in atlasDict ? atlasDict.WALL.geometry : Object.values(atlasDict)[0];
+    defaultGeom = new THREE.PlaneGeometry(1, 1);//TODO: Shared.cellSize instead of 1?
+    markerGeom = defaultGeom.clone();
+    setUVsByName(markerGeom, "WALL");
+
+    //start in add plane mode
+    setAddMode(ADDPLANEMODE);
+
+    /*-----------------------------*/
+    // MARKERS SETUP
+    // In Three.js, the coordinate system is a right-handed Cartesian system, and the axes are organized like this:
+    //       Y+ (up) (green)
+    //        |
+    //        |
+    //        |_____ X+ (right) (red)
+    //       /
+    //      /
+    //    Z+ (toward you) (blue)
+    /*-----------------------------*/
+
+    // MARKER MATERIALS
+    markerxzmaterial = Shared.atlasMat.clone();
+    Object.assign(markerxzmaterial,
+        {
+            side: THREE.DoubleSide,
+            //note: a transparent plane adds 2 draw calls per plane instead of 1.
+            transparent: false,
+            opacity: 0.5
+        });
+    markeryzmaterial = markerxzmaterial.clone();
+    markerxymaterial = markerxzmaterial.clone();
+    markerremovematerial = new THREE.MeshBasicMaterial(
+        {
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.5
+        });
+
+    markerxzmaterial.color.set(0x00ff00);  //XZ: horizontal plane, green
+    markeryzmaterial.color.set(0xff0000);  //YZ: left plane,       red
+    markerxymaterial.color.set(0x0000ff);  //XY: front plane,      blue
+    markerremovematerial.color.set(0xffff00);  //eraser:               yellow
+
+    markerxzmaterial.name = "markerxzmaterial";
+    markeryzmaterial.name = "markeryzmaterial";
+    markerxymaterial.name = "markerxymaterial";
+    markerremovematerial.name = "markerremovematerial";
+
+    // MARKER MESH
+    markerxz = new THREE.Mesh(markerGeom, markerxzmaterial);
+    markeryz = new THREE.Mesh(markerGeom, markeryzmaterial);
+    markerxy = new THREE.Mesh(markerGeom, markerxymaterial);
+
+    markerxz.name = "markerxz"
+    markeryz.name = "markeryz"
+    markerxy.name = "markerxy"
+
+    markerxz.position.set(0.5, 0, 0.5);   //relative x,y,z
+    markerxz.rotation.x = Math.PI / 2;  //horizontal plane (facing sky)
+
+    markeryz.position.set(0, 0.5, 0.5);
+    markeryz.rotation.y = Math.PI / 2;  //left plane
+
+    markerxy.position.set(0.5, 0.5, 0);  //front plane (facing you)
+
+    // MARKER GROUP
+    markergroupxz = new THREE.Group(); markergroupxz.name = "markergroupxz";
+    markergroupyz = new THREE.Group(); markergroupyz.name = "markergroupyz";
+    markergroupxy = new THREE.Group(); markergroupxy.name = "markergroupxy";
+
+    markergroupxz.visible = showMarkerXZ;
+    markergroupyz.visible = showMarkerYZ;
+    markergroupxy.visible = showMarkerXY;
+
+    markergroupxz.add(markerxz.clone());
+    markergroupyz.add(markeryz.clone());
+    markergroupxy.add(markerxy.clone());
+
+    Shared.scene.add(markergroupxz);
+    Shared.scene.add(markergroupyz);
+    Shared.scene.add(markergroupxy);
+
+    // create the scene
+    createScene();
+
+    //initialize scene
+    initializeScene();
+
+    // Reset the clock to start from 0
+    Shared.clock.start();
+
+}
+
+/*---------------------------------*/
+// startEditorLoop
+/*---------------------------------*/
+export function startEditorLoop() {
+    Shared.editorState.editorRunning = true;
+    editorId = requestAnimationFrame(editorLoop);
+    reinitMarker();
+    markeryzmaterial.visible     = true;
+    markerxzmaterial.visible     = true;
+    markerxymaterial.visible     = true;
+    markerremovematerial.visible = true;
+    grid.visible                 = true;
+    axes.visible                 = true;
+    lightHelperGroup.visible     = true;
+}
+
+/*---------------------------------*/
+// stopEditorLoop
+/*---------------------------------*/
+export function stopEditorLoop() {
+    Shared.editorState.editorRunning = false;
+
+    cancelAnimationFrame(editorId);
+
+    reinitMarker();
+
+    markeryzmaterial.visible     = false;
+    markerxzmaterial.visible     = false;
+    markerxymaterial.visible     = false;
+    markerremovematerial.visible = false;
+    grid.visible                 = false;
+    axes.visible                 = false;
+    lightHelperGroup.visible     = false;
+}
+
+/*---------------------------------*/
+// setEraser
+/*---------------------------------*/
+function setEraser(enabled) {
+    eraserMode = enabled;
+
+    if (eraserMode) {
+        markerxz.material = markerremovematerial;
+        markeryz.material = markerremovematerial;
+        markerxy.material = markerremovematerial;
+    } else {
+        markerxz.material = markerxzmaterial;
+        markeryz.material = markeryzmaterial;
+        markerxy.material = markerxymaterial;
+    }
+    reinitMarker();
+}
+
+/*---------------------------------*/
+// nextWall
+/*---------------------------------*/
+function nextWall() {
+    toggleWall(1);
+}
+
+function prevWall() {
+    toggleWall(-1);
+}
+
+function toggleWall(increment = 1) {
+    wallModeSelect = (((wallModeSelect + increment) % NUMMODES) + NUMMODES) % NUMMODES;
+    showMarkerXZ = false;
+    showMarkerYZ = false;
+    showMarkerXY = false;
+    switch (wallModeSelect) {
+        case MODEXZ:
+            showMarkerXZ = true;
+            break;
+        case MODEYZ:
+            showMarkerYZ = true;
+            break;
+        case MODEXY:
+            showMarkerXY = true;
+            break;
+        case MODEW:
+            showMarkerYZ = true;
+            showMarkerXY = true;
+            break;
+        case MODEA:
+            showMarkerXZ = true;
+            showMarkerYZ = true;
+            showMarkerXY = true;
+            break;
+    }
+}
+
+/*---------------------------------*/
+// nextMaterial
+/*---------------------------------*/
+function nextMaterial() {
+    toggleMaterial(1);
+}
+
+function prevMaterial() {
+    toggleMaterial(-1);
+}
+
+function toggleMaterial(increment) {
+    let l = Shared.atlasArray.length;
+    currentGeomIndex = (((currentGeomIndex + increment) % l) + l) % l;
+    let currentName = Shared.atlasArray[currentGeomIndex][0];
+    setUVsByName(markerGeom, currentName);
+    reinitMarker();
+}
+
+/*---------------------------------*/
+// placeGroup
+/*---------------------------------*/
+function placeGroup(group, targetgroup, grid, material) {
+    while (group.children.length > 0) {
+        let child = group.children[0];
+        placeTile(child, grid, targetgroup);
+        //child is removed when userData and todelete are defined (?option) and todelete is true
+        //for mode MODEW or MODEA we want the scene walls intersecting with the BB to be deleted
+        //so the current inner invisible "todelete" walls are tested against these to cull them 
+        // in placeTile function
+        //then we remove them in following lines
+        if (eraserMode || child.userData?.todelete) {
+            group.remove(child);
+        } else {
+            child.position.y -= Shared.EPSILON;//remove Shared.EPSILON vertical offset
+            if (material)
+                child.material = material;//apply material without transparency/tint
+        }
+    }
+}
+
+/*---------------------------------*/
+// placeLight
+/*---------------------------------*/
+function placeLight(lightv, lighthelperv) {
+
+    let worldPos = new THREE.Vector3();
+    lightv.getWorldPosition(worldPos);
+    let wx = Math.floor(worldPos.x / Shared.cellSize);
+    let wy = Math.floor(worldPos.y / Shared.cellSize);
+    let wz = Math.floor(worldPos.z / Shared.cellSize);
+    const key = Shared.getGridKey(wx, wy, wz);
+
+    if (Shared.gridLight.has(key)) {
+        let lighttoremove = Shared.gridLight.get(key).light;
+        if (lighttoremove) {
+            lightGroup.remove(lighttoremove);
+            lighttoremove.dispose();
+        }
+        let lighhelpertoremove = Shared.gridLight.get(key).helper;
+        if (lighhelpertoremove) {
+            lightHelperGroup.remove(lighhelpertoremove);
+            lighhelpertoremove.dispose();
+        }
+    }
+
+    //if eraser mode we finished our work here
+    if (eraserMode) return;
+
+    lightGroup.add(lightv);
+    lightHelperGroup.add(lighthelperv);
+    Shared.gridLight.set(key, { light: lightv, helper: lighthelperv });
+
+}
+
+/*---------------------------------*/
+// placeTile
+/*---------------------------------*/
+function placeTile(tile, gridmap, group) {
+
+    let worldPos = new THREE.Vector3();
+    tile.getWorldPosition(worldPos);
+    let wx = Math.floor(worldPos.x / Shared.cellSize);
+    let wy = Math.floor(worldPos.y / Shared.cellSize);
+    let wz = Math.floor(worldPos.z / Shared.cellSize);
+    const key = Shared.getGridKey(wx, wy, wz);
+
+    if (gridmap.has(key)) {
+        const tiletoremove = gridmap.get(key);
+        if (tiletoremove) {
+            group.remove(tiletoremove);
+            tiletoremove.geometry.dispose();
+            tiletoremove.material.dispose();
+        }
+        gridmap.delete(key);
+    }
+
+    //if eraser mode we finished our work here
+    if (eraserMode
+        || tile.userData?.todelete
+    ) return;
+
+    //otherwise add tile now
+    uniquifyGeometry(tile);
+    group.add(tile); // This automatically removes it from sourceGroup
+    tile.position.copy(worldPos);
+    gridmap.set(key, tile);
+
+}
+
+/*---------------------------------*/
+// uniquifyGeometry
+/*---------------------------------*/
+function uniquifyGeometry(mesh) {
+    // clone the geometry to avoid having all meshes changing uvs with marker
+    const originalGeom = mesh.geometry;
+    const newGeom = mesh.geometry.clone();
+
+    // still share the original vertex attributes like position/normal/index to minimize memory footprint
+    newGeom.setAttribute('position', originalGeom.getAttribute('position'));
+    newGeom.setAttribute('normal', originalGeom.getAttribute('normal'));
+    newGeom.setIndex(originalGeom.getIndex());
+
+    // Optional: explicitly clone UVs to be extra safe
+    // if (mesh.geometry.attributes.uv) {
+    //     newGeom.setAttribute('uv', mesh.geometry.attributes.uv.clone());
+    // }
+
+    mesh.geometry = newGeom;
+}
+
+/*---------------------------------*/
+// onMouseClick
+/*---------------------------------*/
+export function onMouseClick(event) {
+
+    if (!Shared.editorState.editorRunning) return;
+
+    if (!selectValid) return;
+
+    if (currentAddMode == ADDLIGHTMODE) {
+        let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, 0.5, selectZ + 0.5));
+        placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
+        return;
+    }
+
+    Shared.editorState.hasClicked = true;
+
+    markergroupxz.visible = false;
+    markergroupxy.visible = false;
+    markergroupyz.visible = false;
+
+    // if (event.shiftKey) { // console.log("Shift + Click detected");
+    boxselectModestartX = selectX;
+    boxselectModestartZ = selectZ;
+    boxselectModeendX = selectX;
+    boxselectModeendZ = selectZ;
+    Shared.editorState.mouseIsDown = true;
+
+    if (event.button == 2)
+        setEraser(true);//eraser on right click
+
+}
+
+/*---------------------------------*/
+// onMouseUp
+/*---------------------------------*/
+export function onMouseUp(event) {
+
+    if (!Shared.editorState.editorRunning) return;
+
+    Shared.editorState.mouseIsDown = false;
+
+    if (currentAddMode == ADDLIGHTMODE) {
+        return;
+    }
+
+    if (!selectValid) {
+        reinitMarker();
+        return;
+    }
+
+    //find material
+    let materialToApply = Shared.atlasMat;
+    if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
+    if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
+    if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
+
+    boxselectModeendX = boxselectModestartX;
+    boxselectModeendZ = boxselectModestartZ;
+
+    //update tilecount
+    // updateTileCount();
+
+    if (event.button == 2)
+        setEraser(false);
+
+    //reinitialize marker
+    reinitMarker();
+
+}
+
+/*---------------------------------*/
+// reinitMarker
+/*---------------------------------*/
+function reinitMarker() {
+    //reinit marker
+    //RED
+    markergroupxz.clear();
+    markergroupxz.add(markerxz.clone());
+    markergroupxz.position.set(selectX, Shared.EPSILON, selectZ);
+
+    //GREEN
+    markergroupyz.clear();
+    //idea: to fake AO: 
+    //create AO png decal (dark bottom gradient with transparency)
+    //create a second atlasMat based on standard or lambertmaterial (better perf)
+    //drive ao map field with ao texture
+    //leave the UV non scaled for the mandatory uv2 field
+    //based on height swap material from atlasMat to atlasMapAO
+    //this enables better separation
+    markergroupyz.add(markeryz.clone());
+    for (let y = 1; y < Shared.SCALEY; y++) {
+        const t = markeryz.clone();
+        t.position.y += y;
+        markergroupyz.add(t);
+    }
+    markergroupyz.position.set(selectX, Shared.EPSILON, selectZ);
+
+    //BLUE
+    markergroupxy.clear();
+    markergroupxy.add(markerxy.clone());
+    for (let y = 1; y < Shared.SCALEY; y++) {
+        const t = markerxy.clone();
+        t.position.y += y;
+        markergroupxy.add(t);
+    }
+    markergroupxy.position.set(selectX, Shared.EPSILON, selectZ);
+
+    //reinit bbox
+    boxselectModeendX = boxselectModestartX;
+    boxselectModeendZ = boxselectModestartZ;
+}
+
+/*---------------------------------*/
+// onMouseWheel
+/*---------------------------------*/
+export function onMouseWheel(event) {
+    if (!Shared.editorState.editorRunning) return;
+    if (event.deltaY < 0) {
+        nextWall();
+    } else {
+        prevWall();
+    }
+}
+
+/*---------------------------------*/
+// pauseAndDebug
+/*---------------------------------*/
+function pauseAndDebug(delta) {
+    // Create a local movement vector based on input
+    const moveVector = new THREE.Vector3();
+    const moveCam = Shared.moveSpeed * delta;
+    if (Actions.moveCamUp) moveVector.y    += 1;
+    if (Actions.moveCamDown) moveVector.y  -= 1;
+    if (Actions.moveCamLeft) moveVector.x  -= 1;
+    if (Actions.moveCamRight) moveVector.x += 1;
+    if (Actions.moveCamFront) moveVector.z -= 1;
+    if (Actions.moveCamBack) moveVector.z  += 1;
+    // camera.lookAt(chara);
+
+    moveVector.normalize();
+    moveVector.applyEuler(new THREE.Euler(0, Shared.yawObject.rotation.y, 0));
+    Shared.yawObject.position.addScaledVector(moveVector, moveCam);
+
+    if (Actions.pause)  Shared.doPause();
+}
+
+/*---------------------------------*/
+// movePlayer
+/*---------------------------------*/
+function movePlayer(delta) {
+
+    if (Actions.jump) jump();
+    if (Actions.nextMaterial) nextMaterial();
+    if (Actions.prevMaterial) prevMaterial();
+    if (Actions.saveLevel) saveLevel();
+    if (Actions.bakeLevel) bakeLevel();
+    if (Actions.loadLevel) loadLevel();
+    if (Actions.startGame) Shared.toggleGameMode();
+    if (Actions.setAddPlaneMode) setAddMode(ADDPLANEMODE);
+    if (Actions.setAddLightMode) setAddMode(ADDLIGHTMODE);
+
+}
+
+/*---------------------------------*/
+// editorLoop
+/*---------------------------------*/
+function editorLoop() {
+
+    if (!Shared.editorState.editorRunning) return;
+
+    //fps counter
+    Stats.stats.begin();
+
+    const deltaTime = Shared.clock.getDelta(); // Time elapsed since last frame
+    GameHUD.drawHUD();
+    pauseAndDebug(deltaTime);
+
+    if (!Shared.editorState.pause || Shared.editorState.renderOneFrame) {
+        Shared.editorState.renderOneFrame = false;
+        movePlayer(deltaTime);
+
+        //FLOOR RAYCAST TEST
+        raycaster.setFromCamera(screenCenter, Shared.camera);
+        const intersects = raycaster.intersectObject(floor);
+
+        selectValid = false;
+        markergroupxz.visible = false;
+        markergroupyz.visible = false;
+        markergroupxy.visible = false;
+
+        let doesIntersect = false;
+        if (intersects.length > 0) {
+            doesIntersect = intersects[0].distance < 12;
+        }
+
+        if (doesIntersect) {
+            const point = intersects[0].point;
+            selectValid = true;
+            markergroupxz.visible = showMarkerXZ;
+            markergroupyz.visible = showMarkerYZ;
+            markergroupxy.visible = showMarkerXY;
+            // Convert world position to grid cell
+            selectX = Math.floor(point.x / Shared.cellSize);
+            selectZ = Math.floor(point.z / Shared.cellSize);
+
+            //UPDATE ONLY WHEN NEW CELL SELECTED
+            if (
+                (selectX != prevSelectX) ||
+                (selectZ != prevSelectZ) ||
+                wallModeSelect != prevWallModeSelect ||
+                Shared.editorState.hasClicked
+            ) {
+                Shared.editorState.hasClicked = false;
+                console.log("newpoint");
+
+                if (!Shared.editorState.mouseIsDown) {
+                    // slightly above floor to prevent z-fighting
+                    markergroupxz.position.set(selectX * Shared.cellSize, Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupyz.position.set(selectX * Shared.cellSize, Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupxy.position.set(selectX * Shared.cellSize, Shared.EPSILON, selectZ * Shared.cellSize);
+                } else {
+
+                    //UPDATE SELECTION BBOX
+                    boxselectModeendX = selectX;
+                    boxselectModeendZ = selectZ;
+
+                    //UPDATE MARKER POSITION
+                    markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+
+                    //CLEAR MARKER MESHES
+                    markergroupxz.clear();
+                    markergroupyz.clear();
+                    markergroupxy.clear();
+
+                    //CALCULATE MARKER SIZE
+                    let scaleX = Math.abs(boxselectModeendX - boxselectModestartX);
+                    let scaleZ = Math.abs(boxselectModeendZ - boxselectModestartZ);
+
+                    //GENERATE MARKER MESHES
+                    //RED
+                    if (showMarkerXZ) {
+                        for (let x = 0; x <= scaleX; x++) {
+                            for (let z = 0; z <= scaleZ; z++) {
+                                const copytile = markerxz.clone();
+                                markergroupxz.add(copytile);
+                                copytile.position.set(x + Shared.cellSize / 2, 0, z + Shared.cellSize / 2);
+                            }
+                        }
+                    }
+
+                    //GREEN
+                    if (showMarkerYZ) {
+                        for (let x = 0; x <= scaleX + 1; x++) {
+                            for (let z = 0; z <= scaleZ; z++) {
+                                //in normal mode adding walls we want to surround the area with walls
+                                //so add them everywhere except "inside" the selection
+                                let todelete = false;
+                                if (!eraserMode) {
+                                    if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
+                                        if (x > 0 && x < scaleX + 1) todelete = true;
+                                    } else {
+                                        if (x > 0) continue;
+                                    }
+                                } else {
+                                    if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
+                                        if (x > 0) continue;
+                                    }
+                                }
+                                for (let y = 0; y < Shared.SCALEY; y++) {
+                                    const copytile = markeryz.clone();
+                                    copytile.userData = {
+                                        todelete: todelete
+                                    };
+                                    copytile.visible = !todelete;
+                                    markergroupyz.add(copytile);
+                                    copytile.position.copy(markeryz.position);
+                                    copytile.position.x += x;
+                                    copytile.position.z += z;
+                                    copytile.position.y += y;
+                                }
+                            }
+                        }
+                    }
+
+                    //BLUE
+                    if (showMarkerXY) {
+                        for (let x = 0; x <= scaleX; x++) {
+                            for (let z = 0; z <= scaleZ + 1; z++) {
+                                let todelete = false;
+                                if (!eraserMode) {
+                                    if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
+                                        if (z > 0 && z < scaleZ + 1) todelete = true;
+                                    } else {
+                                        if (z > 0) continue;
+                                    }
+                                } else {
+                                    if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
+                                        if (z > 0) continue;
+                                    }
+                                }
+                                for (let y = 0; y < Shared.SCALEY; y++) {
+                                    const copytile = markerxy.clone();
+                                    markergroupxy.add(copytile);
+                                    copytile.userData = {
+                                        todelete: todelete
+                                    };
+                                    copytile.visible = !todelete;
+                                    copytile.position.copy(markerxy.position);
+                                    copytile.position.x += x;
+                                    copytile.position.z += z;
+                                    copytile.position.y += y;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            //KEEP TRACK OF LAST SELECTED CELL
+            prevSelectX = selectX;
+            prevSelectZ = selectZ;
+            prevWallModeSelect = wallModeSelect;
+
+        } else {
+
+            //NO CELL SELECTED, REINIT MARKER AND BBOX
+            Shared.editorState.mouseIsDown = false;
+            //reinit marker only when it was valid before and
+            //it is not anymore
+            if (prevSelectValid)
+                reinitMarker();
+
+        }
+
+        prevSelectValid = selectValid;
+
+        //RENDER GIZMO HELPER in BOTTOM LEFT CORNER
+        if (1) {
+            // 1. Render main scene
+            Shared.renderer.setViewport(0, 0, Shared.container.clientWidth, Shared.container.clientHeight);
+            Shared.renderer.clear();
+            Shared.renderer.render(Shared.scene, Shared.camera);
+            // console.log("draw calls main scene", renderer.info.render.calls);
+            Stats.renderStats.drawcalls = Shared.renderer.info.render.calls;
+
+            // 2. Render mini viewport (e.g., bottom-left corner)
+            const vpSize = 100;
+            Shared.renderer.setViewport(10, 10, vpSize, vpSize);
+            Shared.renderer.setScissor(10, 10, vpSize, vpSize);
+            Shared.renderer.setScissorTest(true);
+            Shared.renderer.clearDepth();
+            Shared.renderer.render(axesScene, axesCamera);
+            // console.log("draw calls mini viewport", renderer.info.render.calls);
+            Stats.renderStats.drawcalls += Shared.renderer.info.render.calls;
+
+            // 3. Reset to full Shared.canvas
+            Shared.renderer.setScissorTest(false);
+
+            //To sync the mini gizmo with your main camera orientation:
+            const worldQuat = new THREE.Quaternion();
+            Shared.camera.getWorldQuaternion(worldQuat);
+            axesHelper.quaternion.copy(worldQuat).invert();
+
+        } else {
+            Shared.renderer.render(Shared.scene, Shared.camera);
+            // console.log("draw calls main scene", renderer.info.render.calls);
+            Stats.renderStats.drawcalls = Shared.renderer.info.render.calls;
+            Shared.renderer.info.reset(); //it auto resets normally
+        }
+
+        // Simulate heavy computation
+        if (0) Stats.simulateBlockingWait(200); // 200ms delay
+        Stats.updateTextStatsThrottled();
+        //clear the onpress/onrelease actions now that they have been sampled 
+        //in that loop to avoid resampling
+        Shared.releaseSingleEventActions();
+        Stats.stats.end();
+    }
+
+    editorId = requestAnimationFrame(editorLoop); //call animate recursively on next frame 
+
+}
+
+/*---------------------------------*/
+// createScene
+/*---------------------------------*/
+function createScene() {
+
+    //miniscene
+    axesCamera.up = Shared.camera.up;
+    axesCamera.position.set(0, 0, 5);
+    axesScene.add(axesHelper);
+
+
+    //helper grid
+
+    grid = new THREE.GridHelper(Shared.gridSize, Shared.gridDivisions);
+    grid.name = "GridHelper";
+    Shared.scene.add(grid);
+    //helper gizmo
+    axes = new THREE.AxesHelper(3); // size
+    axes.name = "AxesHelper";
+    Shared.scene.add(axes);
+
+    //raycast floor
+    floor.rotation.x = -Math.PI / 2; // face up
+    Shared.scene.add(floor);
+
+    Shared.scene.add(tileXZGroup);
+    Shared.scene.add(tileXYGroup);
+    Shared.scene.add(tileYZGroup);
+    Shared.scene.add(lightGroup);
+    Shared.scene.add(lightHelperGroup);
+
+    const ambientLight = new THREE.AmbientLight(new THREE.Color(1, 1, 1).multiplyScalar(0.45)); // Soft light
+    Shared.scene.add(ambientLight);
+
+}
+
+/*---------------------------------*/
+// initializeScene
+/*---------------------------------*/
+function initializeScene() {
+
+    //reset pause
+    // Shared.editorState.pause = true;
+    Shared.setPause(true);
+
+    //clear all game actions
+    Actions = {};
+
+    //reset message
+    GameHUD.setMessageScreen("");
+
+}
+
+/*---------------------------------*/
+// bakeLevel
+/*---------------------------------*/
+export function bakeLevel() {
+    console.log("BAKELEVEL");
+    bakeGroup(tileXYGroup);
+    bakeGroup(tileYZGroup);
+    bakeGroup(tileXZGroup);
+}
+
+/*---------------------------------*/
+// bakeGroup
+/*---------------------------------*/
+function bakeGroup(group) {
+    const tileGeometries = [];
+    group.children.forEach(plane => {
+        // Clone geometry to avoid modifying original
+        const geom = plane.geometry.clone();
+
+        // Apply world matrix of the mesh to geometry
+        geom.applyMatrix4(plane.matrixWorld);
+
+        tileGeometries.push(geom);
+    });
+    bakedGeometry = mergeBufferGeometries(tileGeometries, false);
+    bakedMesh = new THREE.Mesh(bakedGeometry, Shared.atlasMat);
+    Shared.scene.add(bakedMesh);
+    group.clear();
+}
+
+/*---------------------------------*/
+// resetLevel
+/*---------------------------------*/
+export function resetLevel() {
+    //meshes removed from group loses ref and will be garbage collected
+    //however they all share materials and geometry these should not be disposed
+    //and should persist after reset
+    tileXYGroup.clear();
+    tileXZGroup.clear();
+    tileYZGroup.clear();
+    lightGroup.clear();
+    lightHelperGroup.clear();
+    Shared.gridMapXY.clear();
+    Shared.gridMapXZ.clear();
+    Shared.gridMapYZ.clear();
+    Shared.gridLight.clear();
+    reinitMarker();
+    Shared.resetCamera();
+    // updateTileCount();
+    Shared.editorState.renderOneFrame = true;//simply update once the Shared.canvas
+
+    if (bakedMesh) bakedMesh.clear();//temp
+}
+
+/*---------------------------------*/
+// setAddMode
+/*---------------------------------*/
+function setAddMode(mode) {
+    switch (mode) {
+        case ADDPLANEMODE:
+            currentAddMode = ADDPLANEMODE;
+            showMarkerXZ = true;
+            AddBtn.classList.add("green");
+            AddLBtn.classList.remove("green");
+            break;
+        case ADDLIGHTMODE:
+            currentAddMode = ADDLIGHTMODE;
+            showMarkerXY = false;
+            showMarkerYZ = false;
+            showMarkerXZ = false;
+            AddBtn.classList.remove("green");
+            AddLBtn.classList.add("green");
+            break;
+    }
+}
+
+///LOAD SAVE
+
+/*---------------------------------*/
+// loadLevel
+/*---------------------------------*/
+export async function loadLevel() {
+    const file = await new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+
+        input.onchange = (event) => {
+            const file = event.target.files[0];
+            resolve(file);  // pass file back to the promise
+        };
+
+        input.click(); // opens the file dialog
+    });
+
+    if (!file) return;
+
+    const json = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const json = JSON.parse(e.target.result);
+                resolve(json);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsText(file);
+    });
+
+    //we want to update progression bar at the same time as loading
+    //so this function and the parent function needs to be asynchronous
+    //so stuff can happen in parallel instead of blocking the main thread
+    await loadPlanesIntoScene(json);
+}
+
+/*---------------------------------*/
+// loadPlanesIntoScene
+/*---------------------------------*/
+let totalElements = 1;
+let loadedElements = 0;
+let loadingTile;
+async function loadPlanesIntoScene(jsondata) {
+    resetLevel();
+
+    eraserMode = false;
+
+    totalElements = Object.values(jsondata)
+        .flatMap(axis => Object.values(axis))
+        .reduce((sum, arr) => sum + arr.length, 0);
+    loadedElements = 0;
+
+    if (totalElements == 0) return;//popup alert here. catch format error too
+
+    //this tile will be cloned during load
+    loadingTile = new THREE.Mesh(
+        markerGeom,
+        Shared.atlasMat,
+    );
+
+    await loadPlaneIntoScene(jsondata, "XY", Shared.gridMapXY, markerxy, tileXYGroup);
+    await loadPlaneIntoScene(jsondata, "XZ", Shared.gridMapXZ, markerxz, tileXZGroup);
+    await loadPlaneIntoScene(jsondata, "YZ", Shared.gridMapYZ, markeryz, tileYZGroup);
+    await loadLightIntoScene(jsondata);
+
+    updateLoadProgression(1);
+    await new Promise(requestAnimationFrame);
+
+    // updateTileCount();
+    Shared.editorState.renderOneFrame = true;
+
+}
+
+// function updateTileCount() {
+//     tilecount = tileXZGroup.children.length +
+//         tileXYGroup.children.length +
+//         tileYZGroup.children.length;
+// }
+
+/*---------------------------------*/
+// loadPlaneIntoScene
+/*---------------------------------*/
+let updateInterval = 10;  // update every 2 planes
+async function loadPlaneIntoScene(jsondata, label, grid, marker, group) {
+    if (label in jsondata) {
+        const jsonplanedata = jsondata[label];
+
+        for (const geomName in jsonplanedata) {
+
+            const planes = jsonplanedata[geomName];
+            const tiletoclone = loadingTile;
+            for (const data of planes) {
+
+                const tile = tiletoclone.clone();
+                tile.position.fromArray(data.position);
+                tile.rotation.copy(marker.rotation);
+                setUVsByName(tile.geometry, geomName);
+                placeTile(tile, grid, group);
+                loadedElements++;
+
+                //every n planes update UI
+                if (loadedElements % updateInterval === 0) {
+                    //update button text
+                    updateLoadProgression(loadedElements / totalElements);
+                    // wait for the UI to render
+                    await new Promise(requestAnimationFrame);
+                }
+            }
+        }
+    }
+}
+
+/*---------------------------------*/
+// loadLightIntoScene
+/*---------------------------------*/
+async function loadLightIntoScene(jsondata) {
+    if ("LIGHTS" in jsondata) {
+        const jsonlightsdata = jsondata["LIGHTS"];
+        for (const lightname in jsonlightsdata) {
+
+            let { light: lightToClone, helper: lightHelperToClone } =
+                Shared.createLight(new THREE.Vector3(0, 0, 0), undefined, undefined, undefined, false);
+
+            const lightsdata = jsonlightsdata[lightname];
+
+            for (const data of lightsdata) {
+                const newlight = lightToClone.clone();
+                newlight.position.fromArray(data.position);
+                const newlighthelper = new THREE.PointLightHelper(newlight, 0.5);
+                newlighthelper.position.copy(newlight);
+                placeLight(newlight, newlighthelper);
+
+                loadedElements++;
+
+                //every n planes update UI
+                if (loadedElements % updateInterval === 0) {
+                    //update button text
+                    updateLoadProgression(loadedElements / totalElements);
+                    // wait for the UI to render
+                    await new Promise(requestAnimationFrame);
+                }
+            }
+        }
+    }
+}
+
+/*---------------------------------*/
+// updateLoadProgression
+/*---------------------------------*/
+function updateLoadProgression(ratio) {
+    const percent = Math.floor(ratio * 100);
+    Shared.LoadBtnTxt.textContent = `Loading... ${percent}%`;
+
+    Shared.LoadBtnProgress.style.width = (ratio * 100) + '%';
+
+    if (ratio >= 1) {
+        // Wait 1 second then reset button
+        setTimeout(() => {
+            Shared.LoadBtnProgress.style.width = '0%';
+            Shared.LoadBtnTxt.textContent = 'Load Planes (L)';
+        }, 1000); // 1000ms = 1 second
+
+    }
+}
+
+/*---------------------------------*/
+// saveLevel
+/*---------------------------------*/
+function saveLevel() {
+    const mergedData = {};
+    mergedData["XY"] = groupPlanesByMaterial(tileXYGroup);
+    mergedData["XZ"] = groupPlanesByMaterial(tileXZGroup);
+    mergedData["YZ"] = groupPlanesByMaterial(tileYZGroup);
+
+    mergedData["LIGHTS"] = groupLights();
+
+    //compress level to a string you  can feed to the url so 
+    //players can share their creations
+    //not a priority at the moment
+    //(idea dont store the floor+ceiling)
+    //(idea store compressed tiles: bounding boxes + tile*iterations
+    //instead of every single tile coordinate)
+    //(idea store compressed bit formats instead of raw data)
+    //(idea final output in base64 6 bits per character)
+    //url max length is ~2000 chara so 1500 bytes
+    //if one tile is 3 bytes thats 500 tiles more or less
+    //not big enough...
+    //although position is 0-127 for x/z and 0-2 for Z
+    //so 7+7+2=16 bits or 2 bytes so could be ~800 tiles
+    // let compressedJsonString = compressJson(mergedData);
+    // console.log("compressedJsonString", compressedJsonString);
+
+    let json = JSON.stringify(mergedData, null, 2);
+
+    // Compact all "position": [ ... ] lines to single-line arrays
+    json = json.replace(/"position": \[\s*([\s\S]*?)\s*\]/g, (match, content) => {
+        const compact = content
+            .split(/\s*,?\s*\n\s*/g)  // split lines and trim
+            .map(s => s.trim())
+            .filter(s => s !== "")    // remove empty lines
+            .join(", ");
+        return `"position": [${compact}]`;
+    });
+
+    json = json.replace(/\{([^{}]*position[^{}]*)\}/g, (match, content) => {
+        // Compact inner content: remove newlines + multiple spaces
+        const compactContent = content
+            .replace(/\s*\n\s*/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        return `{${compactContent}}`;
+    });
+
+    downloadJson(json, "grouped_planes.json");
+}
+
+/*---------------------------------*/
+// groupLights
+/*---------------------------------*/
+function groupLights() {
+    const grouped = {};
+    lightGroup.traverse((child) => {
+        if (child.isLight) {
+            const lightname = "LIGHT0";//TEMP
+
+            if (!grouped[lightname]) {
+                grouped[lightname] = [];
+            }
+
+            grouped[lightname].push({
+                position: child.position.toArray(),
+            });
+        }
+    })
+    return grouped;
+}
+
+/*---------------------------------*/
+// groupPlanesByMaterial
+/*---------------------------------*/
+function groupPlanesByMaterial(group) {
+    const grouped = {};
+
+    group.traverse((child) => {
+        if (
+            child.isMesh &&
+            child.geometry instanceof THREE.PlaneGeometry
+        ) {
+            const geomName = child.geometry?.name || "Unnamed";
+
+            if (!grouped[geomName]) {
+                grouped[geomName] = [];
+            }
+
+            grouped[geomName].push({
+                position: child.position.toArray(),
+            });
+        }
+    });
+
+    return grouped;
+}
+
+/*---------------------------------*/
+// downloadJson
+/*---------------------------------*/
+function downloadJson(data, filename) {
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+
+    URL.revokeObjectURL(url);
+}
+
+/*---------------------------------*/
+// setUVsByName
+/*---------------------------------*/
+function setUVsByName(geom, uvname) {
+    const tilecoordx = (Shared.atlasUVs[uvname]?.x || 0);
+    const tilecoordy = (Shared.atlasUVs[uvname]?.y || 0);
+    setUVs(geom, tilecoordx, tilecoordy, uvname);
+}
+
+/*---------------------------------*/
+// setUVs
+/*---------------------------------*/
+function setUVs(geom, xt, yt, name) {
+
+    let uv = defaultGeom.attributes.uv.clone();//reinit the uvs
+
+    const tilesPerRow = Shared.atlasDict?.NUMX || 8;
+    const tilesPerCol = Shared.atlasDict?.NUMY || 8;
+
+    const scalex = 1 / tilesPerRow; // 0.125
+    const scaley = 1 / tilesPerCol; // 0.125
+
+    const offsetX = xt * scalex;
+    const offsetY = yt * scaley;
+    for (let i = 0; i < uv.count; i++) {
+        let x = uv.getX(i);
+        let y = uv.getY(i);
+        // Scale down to tile size
+        x = x * scalex;
+        y = y * scaley;
+        // Offset to desired tile
+        x += offsetX;
+        y += offsetY;
+        uv.setXY(i, x, y);
+    }
+    uv.needsUpdate = true;
+
+    // Make sure UVs are an independent BufferAttribute
+    geom.name = name;
+    geom.setAttribute('uv', uv);
+
+}
