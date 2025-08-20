@@ -7,8 +7,8 @@ import * as GameHUD from '../game/gameHUD.js';
 /*-----------------------------------------------------*/
 //  BUTTONS
 /*-----------------------------------------------------*/
-const AddBtn   = document.getElementById('AddBtn');
-const AddLBtn  = document.getElementById('AddLBtn');
+// const AddBtn   = document.getElementById('AddBtn');
+// const AddLBtn  = document.getElementById('AddLBtn');
 const LoadBtn  = document.getElementById('LoadBtn');
 const SaveBtn  = document.getElementById('SaveBtn');
 const BakeBtn  = document.getElementById('BakeBtn');
@@ -18,22 +18,40 @@ const StartBtn = document.getElementById('StartBtn');
 /*-----------------------------------------------------*/
 // BUTTON LISTENERS
 /*-----------------------------------------------------*/
-AddBtn.addEventListener('click', () => {
-    Shared.canvas.focus();
-    Shared.canvas.requestPointerLock();
-    Editor.setAddMode(ADDPLANEMODE);
-});
-AddLBtn.addEventListener('click', () => {
-    Shared.canvas.focus();
-    Shared.canvas.requestPointerLock();
-    Editor.setAddMode(ADDLIGHTMODE);
-});
+// AddBtn.addEventListener('click', () => {
+//     Shared.canvas.focus();
+//     Shared.canvas.requestPointerLock();
+//     Editor.setAddMode(ADDPLANEMODE);
+// });
+// AddLBtn.addEventListener('click', () => {
+//     Shared.canvas.focus();
+//     Shared.canvas.requestPointerLock();
+//     Editor.setAddMode(ADDLIGHTMODE);
+// });
 LoadBtn.addEventListener('click', () => { Editor.loadLevel(); });
 SaveBtn.addEventListener('click', () => { Editor.saveLevel(); });
 BakeBtn.addEventListener('click', () => { Editor.bakeLevel(); });
 ResetBtn.addEventListener('click', () => { Editor.resetLevel(); });
 StartBtn.addEventListener('click', () => { Shared.toggleGameMode(); });
 
+/*-----------------------------------------------------*/
+// COMBOBOX
+/*-----------------------------------------------------*/
+const matSelect = document.getElementById("matSelect");
+const meshSelect = document.getElementById("meshSelect");
+
+/*-----------------------------------------------------*/
+// COMBOBOX LISTENER
+/*-----------------------------------------------------*/
+matSelect.addEventListener("change", (event) => {
+    Editor.setMaterial(event.target.value);
+    Editor.setCurrentGeomIndex(event.target.selectedIndex);
+    console.log("event.target.selectedIndex",event.target.selectedIndex);
+});
+meshSelect.addEventListener("change", (event) => {
+    Editor.setMesh(event.target.value);
+    Editor.setCurrentMeshIndex(event.target.selectedIndex);
+});
 
 /*-----------------------------------------------------*/
 // DOCUMENT/Shared.canvas EVENT LISTENERS
@@ -97,4 +115,138 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('keyup', (event) => {
     Shared.onKeyUpEvent(event);
 });
+
+/*-----------------------------------------------------*/
+// CUSTOM EVENT
+/*-----------------------------------------------------*/
+document.addEventListener("UIChange", (e) => {
+    const { field, value } = e.detail;
+    switch (field) {
+        case "modeChange":
+            document.querySelectorAll("#ui-panel .tab-header").forEach(
+                h => {
+                    const mode = h.dataset.mode;
+                    if (mode == value) {
+                        console.log("match mode found");
+                        expandHeader(h);
+                    }
+                }
+            );
+            break;
+        case "MaterialChange":
+            // ensure the option exists before setting
+            const optionExists = Array.from(matSelect.options).some(
+                opt => opt.value === value
+            );
+
+            if (optionExists) {
+                matSelect.value = value;
+            } else {
+                console.warn("No such material in combobox:", value);
+            }
+            break;
+        case "MeshChange":
+            // ensure the option exists before setting
+            const optionMeshExists = Array.from(meshSelect.options).some(
+                opt => opt.value === value
+            );
+
+            if (optionMeshExists) {
+                meshSelect.value = value;
+            } else {
+                console.warn("No such mesh in combobox:", value);
+            }
+            break;            
+        default:
+            console.log("default",field);
+            break;
+    }
+});
+
+
+/*-----------------------------------------------------*/
+// TAB EVENTS
+/*-----------------------------------------------------*/
+
+document.querySelectorAll("#ui-panel .tab-header").forEach(header => 
+    header.addEventListener("click", () => expandHeader(header))
+);
+
+function expandHeader(header) {
+
+    {
+        const tab = header.parentElement;
+        const isActive = tab.classList.contains("active");
+
+        // Collapse all tabs
+        document.querySelectorAll("#ui-panel .tab").forEach(
+            t => {
+                t.classList.remove("active");
+            }
+        );
+        document.querySelectorAll("#ui-panel .tab-header").forEach(
+            h => {
+                h.classList.remove("green")
+            }
+        );
+
+        // Expand if it wasn't already open
+        if (!isActive) {
+            tab.classList.add("active");
+            header.classList.add("green");
+
+            // Call setAddMode if the header has a mode
+            const mode = header.dataset.mode;
+            switch (mode) {
+                case "addPlane":
+                    Editor.setAddMode(Editor.ADDPLANEMODE);
+                    // console.log("ADDPLANEMODE");
+                    break;
+                case "addLight":
+                    Editor.setAddMode(Editor.ADDLIGHTMODE);
+                    // console.log("ADDLIGHTMODE");
+                    break;
+                case "addMesh":
+                    Editor.setAddMode(Editor.ADDMESHMODE);
+                    // console.log("ADDMESHMODE");
+                    break;
+                case "addPlane":
+                    break;
+            }
+
+        }
+    }
+}
+
+
+/*-----------------------------------------------------*/
+// setupEditorUI
+/*-----------------------------------------------------*/
+export function setupEditorUI() {
+    // set material combobox
+    const matSelect = document.getElementById("matSelect");
+    // fill combo with keys from matDict
+    Object.keys(Shared.atlasUVs).forEach(key => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = key;  // visible label
+        matSelect.appendChild(option);
+    });
+
+    // set default starting value
+    // if (matSelect.options.length > 0) {
+    //     matSelect.value = Object.keys(Shared.atlasUVs)[0]; // first key as default
+    // }
+
+    // set mesh combobox
+    const meshSelect = document.getElementById("meshSelect");
+    // fill combo with keys from atlasMesh
+    Object.keys(Shared.atlasMesh).forEach(key => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = key;  // visible label
+        meshSelect.appendChild(option);
+    });
+
+}
 
