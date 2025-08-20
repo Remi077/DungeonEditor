@@ -9,9 +9,10 @@ import {mergeBufferGeometries} from '../utils/BufferGeometryUtils.js';
 /*-----------------------------------------------------*/
 
 // addition modes
-const ADDPLANEMODE = 0;
-const ADDLIGHTMODE = 1;
-const NUMADDMODES = 2;
+export const ADDPLANEMODE = 0;
+export const ADDLIGHTMODE = 1;
+export const ADDMESHMODE = 2;
+export const NUMADDMODES = 3;
 
 // tile addition modes
 const MODEXZ = 0;
@@ -30,7 +31,10 @@ export let Actions = {};
 
 let defaultGeom;
 let markerGeom;
-let currentGeomIndex = 1;
+let currentGeomIndex = 0;
+let currentUVName = "";
+let currentMeshName="";
+let currentMeshIndex = 0;
 
 // groups holding plane tiles
 let tileXZGroup = new THREE.Group(); tileXZGroup.name = "tileXZGroup";
@@ -94,14 +98,17 @@ export let ActionToKeyMap = {
     moveCamBack    : { key: 'KeyS' },
     setAddPlaneMode: { key: 'Digit1', OnPress: true },
     setAddLightMode: { key: 'Digit2', OnPress: true },
+    setAddMeshMode : { key: 'Digit3', OnPress: true },
     pause          : { key: 'KeyP', OnRelease: true },   //triggered once only at release
     prevMaterial   : { key: 'KeyQ', OnPress: true },
     nextMaterial   : { key: 'KeyE', OnPress: true },
+    nextMesh       : { key: 'Tab', OnPress: true },
     saveLevel      : { key: 'KeyT', OnPress: true },
     bakeLevel      : { key: 'KeyB', OnPress: true },
     loadLevel      : { key: 'KeyL', OnPress: true },
     startGame      : { key: 'KeyG', OnPress: true },
 };
+
 
 /*-----------------------------------------------------*/
 // PRELIMINARIES
@@ -155,14 +162,46 @@ Shared.scene.background = new THREE.Color(0x000000);
 Shared.renderer.setSize(Shared.container.clientWidth, Shared.container.clientHeight);
 
 /*---------------------------------*/
+// setMeshPosition
+/*---------------------------------*/
+function setMeshPosition() {
+    // markerxz.position.set(0.5, 0, 0.5);   //relative x,y,z
+    // markerxz.rotation.x = Math.PI / 2;  //horizontal plane (facing sky)
+
+    // markeryz.position.set(0, 0.5, 0.5);
+    // markeryz.rotation.y = Math.PI / 2;  //left plane
+
+    // markerxy.position.set(0.5, 0.5, 0);  //front plane (facing you)
+
+
+    markerxz.position.set(0.5, 0, 0.5);  //relative x,y,z
+
+    markeryz.rotation.z = Math.PI / 2;   //left plane
+    markeryz.position.set(0, 0.5, 0.5);   
+
+    markerxy.rotation.x = Math.PI / 2;   //left plane
+    markerxy.position.set(0.5, 0.5, 0);  //front plane (facing you)
+}
+
+/*---------------------------------*/
 // setupEditor
 /*---------------------------------*/
+let scene;
+let gridMapXZ; 
+let gridMapYZ; 
+let gridMapXY; 
 export function setupEditor() {
 
-    // defaultGeom = 'WALL' in atlasDict ? atlasDict.WALL.geometry : Object.values(atlasDict)[0];
-    defaultGeom = new THREE.PlaneGeometry(1, 1);//TODO: Shared.cellSize instead of 1?
-    markerGeom = defaultGeom.clone();
-    setUVsByName(markerGeom, "WALL");
+    //setup local references to be able to watch them
+    //in debugger
+    scene = Shared.scene;
+    gridMapXZ = Shared.gridMapXZ;
+    gridMapYZ = Shared.gridMapYZ;
+    gridMapXY = Shared.gridMapXY;
+
+    currentUVName = Shared.atlasUVsArray[0][0];
+    currentMeshName = Shared.atlasMeshArray[0][0];
+
 
     //start in add plane mode
     setAddMode(ADDPLANEMODE);
@@ -208,21 +247,20 @@ export function setupEditor() {
     markerremovematerial.name = "markerremovematerial";
 
     // MARKER MESH
+    // defaultGeom = 'WALL' in atlasDict ? atlasDict.WALL.geometry : Object.values(atlasDict)[0];
+    // defaultGeom = new THREE.PlaneGeometry(1, 1);//TODO: Shared.cellSize instead of 1?
+    // markerGeom = defaultGeom.clone();
+    // setUVsByName(markerGeom, "WALL");
+
+    //by default
     markerxz = new THREE.Mesh(markerGeom, markerxzmaterial);
     markeryz = new THREE.Mesh(markerGeom, markeryzmaterial);
     markerxy = new THREE.Mesh(markerGeom, markerxymaterial);
+    // setMeshPosition();
 
     markerxz.name = "markerxz"
     markeryz.name = "markeryz"
     markerxy.name = "markerxy"
-
-    markerxz.position.set(0.5, 0, 0.5);   //relative x,y,z
-    markerxz.rotation.x = Math.PI / 2;  //horizontal plane (facing sky)
-
-    markeryz.position.set(0, 0.5, 0.5);
-    markeryz.rotation.y = Math.PI / 2;  //left plane
-
-    markerxy.position.set(0.5, 0.5, 0);  //front plane (facing you)
 
     // MARKER GROUP
     markergroupxz = new THREE.Group(); markergroupxz.name = "markergroupxz";
@@ -232,6 +270,10 @@ export function setupEditor() {
     markergroupxz.visible = showMarkerXZ;
     markergroupyz.visible = showMarkerYZ;
     markergroupxy.visible = showMarkerXY;
+
+    setMesh("Plane");//by default
+    setMaterial(Shared.atlasUVsArray[0][0]);//first material index by default
+    // setMaterial("WALL");//by default
 
     markergroupxz.add(markerxz.clone());
     markergroupyz.add(markeryz.clone());
@@ -343,9 +385,7 @@ function toggleWall(increment = 1) {
     }
 }
 
-/*---------------------------------*/
-// nextMaterial
-/*---------------------------------*/
+
 function nextMaterial() {
     toggleMaterial(1);
 }
@@ -354,12 +394,73 @@ function prevMaterial() {
     toggleMaterial(-1);
 }
 
+export function setCurrentGeomIndex(i){currentGeomIndex = i;}
+
 function toggleMaterial(increment) {
-    let l = Shared.atlasArray.length;
+    let l = Shared.atlasUVsArray.length;
     currentGeomIndex = (((currentGeomIndex + increment) % l) + l) % l;
-    let currentName = Shared.atlasArray[currentGeomIndex][0];
-    setUVsByName(markerGeom, currentName);
+    let currentName = Shared.atlasUVsArray[currentGeomIndex][0];
+    setMaterial(currentName);
+    //notify the UI back to update the selected combobox
+    const event = new CustomEvent("UIChange", {
+        detail: { field: "MaterialChange", value: currentName },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(event);
+}
+
+export function setMaterial(name) {
+    console.log(name);
+    currentUVName=name;
+    setUVsByName(markerGeom, name, currentMeshName);
     reinitMarker();
+    Shared.editorState.renderOneFrame = true;
+}
+
+/*---------------------------------*/
+// setMesh
+/*---------------------------------*/
+function nextMesh(){
+    toggleMesh(1);
+}
+
+export function setCurrentMeshIndex(i){currentMeshIndex = i;}
+
+function toggleMesh(increment){
+    let l = Shared.atlasMeshArray.length;
+    currentMeshIndex = (((currentMeshIndex + increment) % l) + l) % l;
+    let currentName = Shared.atlasMeshArray[currentMeshIndex][0];
+    setMesh(currentName);
+    //notify the UI back to update the selected combobox
+    const event = new CustomEvent("UIChange", {
+        detail: { field: "MeshChange", value: currentName },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(event);
+}
+
+export function setMesh(name) {
+    console.log(name);
+
+    //reassign defaultGeom, markerGeom and markerxy meshes
+    const newGeom = Shared.atlasMesh[name]?.geometry;
+    if (!newGeom) {
+        console.error(name,"is not a valid mesh name");
+        return;
+    }
+    currentMeshName = name;
+    defaultGeom = newGeom;
+    markerGeom = defaultGeom.clone();
+    setUVsByName(markerGeom, currentUVName, currentMeshName);
+    markerxz = new THREE.Mesh(markerGeom, markerxzmaterial);
+    markeryz = new THREE.Mesh(markerGeom, markeryzmaterial);
+    markerxy = new THREE.Mesh(markerGeom, markerxymaterial);
+
+    setMeshPosition(markerxz,markeryz,markerxy);
+
+    reinitMarker();
+
+    Shared.editorState.renderOneFrame = true;
 }
 
 /*---------------------------------*/
@@ -421,23 +522,42 @@ function placeLight(lightv, lighthelperv) {
 /*---------------------------------*/
 // placeTile
 /*---------------------------------*/
+
+const worldPos = new THREE.Vector3();
 function placeTile(tile, gridmap, group) {
 
-    let worldPos = new THREE.Vector3();
     tile.getWorldPosition(worldPos);
     let wx = Math.floor(worldPos.x / Shared.cellSize);
     let wy = Math.floor(worldPos.y / Shared.cellSize);
     let wz = Math.floor(worldPos.z / Shared.cellSize);
     const key = Shared.getGridKey(wx, wy, wz);
+    const meshname = tile.geometry.userData?.meshname || "Plane";
 
     if (gridmap.has(key)) {
-        const tiletoremove = gridmap.get(key);
-        if (tiletoremove) {
-            group.remove(tiletoremove);
-            tiletoremove.geometry.dispose();
-            tiletoremove.material.dispose();
+        const gridtiles = gridmap.get(key);
+        if (eraserMode) {
+            // Remove all tiles at this grid cell
+            for (const tiletoremove of gridtiles.values()) {
+                if (tiletoremove) {
+                    group.remove(tiletoremove);
+                    tiletoremove.geometry.dispose();
+                    tiletoremove.material.dispose();
+                }
+            }
+            gridtiles.clear();
+        } else {
+            if (gridtiles.has(meshname)) {
+                const tiletoremove = gridtiles.get(meshname);
+                if (tiletoremove) {
+                    group.remove(tiletoremove);
+                    tiletoremove.geometry.dispose();
+                    tiletoremove.material.dispose();
+                }
+                gridtiles.delete(meshname);
+            }
         }
-        gridmap.delete(key);
+        if (gridtiles.size === 0)
+            gridmap.delete(key);
     }
 
     //if eraser mode we finished our work here
@@ -449,7 +569,14 @@ function placeTile(tile, gridmap, group) {
     uniquifyGeometry(tile);
     group.add(tile); // This automatically removes it from sourceGroup
     tile.position.copy(worldPos);
-    gridmap.set(key, tile);
+
+    //update the gridmap
+    let newgridtiles = gridmap.get(key);
+    if (!newgridtiles) {
+        newgridtiles = new Map();
+        gridmap.set(key, newgridtiles);
+    }
+    newgridtiles.set(meshname,tile);
 
 }
 
@@ -461,10 +588,14 @@ function uniquifyGeometry(mesh) {
     const originalGeom = mesh.geometry;
     const newGeom = mesh.geometry.clone();
 
+    //.clone() creates new copy of these, avoid that
     // still share the original vertex attributes like position/normal/index to minimize memory footprint
     newGeom.setAttribute('position', originalGeom.getAttribute('position'));
     newGeom.setAttribute('normal', originalGeom.getAttribute('normal'));
     newGeom.setIndex(originalGeom.getIndex());
+
+    //userData is shared with .clone(), avoid that
+    newGeom.userData = JSON.parse(JSON.stringify(originalGeom.userData));
 
     // Optional: explicitly clone UVs to be extra safe
     // if (mesh.geometry.attributes.uv) {
@@ -516,7 +647,7 @@ export function onMouseUp(event) {
 
     Shared.editorState.mouseIsDown = false;
 
-    if (currentAddMode == ADDLIGHTMODE) {
+    if (currentAddMode != ADDPLANEMODE) {
         return;
     }
 
@@ -565,7 +696,7 @@ function reinitMarker() {
     //based on height swap material from atlasMat to atlasMapAO
     //this enables better separation
     markergroupyz.add(markeryz.clone());
-    for (let y = 1; y < Shared.SCALEY; y++) {
+    for (let y = 1; y < Shared.CEILINGHEIGHT; y++) {
         const t = markeryz.clone();
         t.position.y += y;
         markergroupyz.add(t);
@@ -575,7 +706,7 @@ function reinitMarker() {
     //BLUE
     markergroupxy.clear();
     markergroupxy.add(markerxy.clone());
-    for (let y = 1; y < Shared.SCALEY; y++) {
+    for (let y = 1; y < Shared.CEILINGHEIGHT; y++) {
         const t = markerxy.clone();
         t.position.y += y;
         markergroupxy.add(t);
@@ -629,13 +760,36 @@ function movePlayer(delta) {
     if (Actions.jump) jump();
     if (Actions.nextMaterial) nextMaterial();
     if (Actions.prevMaterial) prevMaterial();
+    if (Actions.nextMesh) nextMesh();
     if (Actions.saveLevel) saveLevel();
     if (Actions.bakeLevel) bakeLevel();
     if (Actions.loadLevel) loadLevel();
     if (Actions.startGame) Shared.toggleGameMode();
-    if (Actions.setAddPlaneMode) setAddMode(ADDPLANEMODE);
-    if (Actions.setAddLightMode) setAddMode(ADDLIGHTMODE);
-
+    if (Actions.setAddPlaneMode) {
+        const event = new CustomEvent("UIChange", {
+            detail: { field: "modeChange", value: ADDPLANEMODE },
+            bubbles: true // optional, allows event to bubble up
+        });
+        document.dispatchEvent(event);
+        setAddMode(ADDPLANEMODE)
+    };
+    if (Actions.setAddLightMode) {
+        const event = new CustomEvent("UIChange", {
+            detail: { field: "modeChange", value: ADDLIGHTMODE },
+            bubbles: true // optional, allows event to bubble up
+        });
+        document.dispatchEvent(event);
+        setAddMode(ADDLIGHTMODE);
+    };
+    if (Actions.setAddMeshMode) {
+        const event = new CustomEvent("UIChange", {
+            detail: { field: "modeChange", value: ADDMESHMODE },
+            bubbles: true // optional, allows event to bubble up
+        });
+        document.dispatchEvent(event);
+        setAddMode(ADDMESHMODE);
+    };
+    
 }
 
 /*---------------------------------*/
@@ -688,7 +842,7 @@ function editorLoop() {
                 Shared.editorState.hasClicked
             ) {
                 Shared.editorState.hasClicked = false;
-                console.log("newpoint");
+                // console.log("newpoint");
 
                 if (!Shared.editorState.mouseIsDown) {
                     // slightly above floor to prevent z-fighting
@@ -745,11 +899,12 @@ function editorLoop() {
                                         if (x > 0) continue;
                                     }
                                 }
-                                for (let y = 0; y < Shared.SCALEY; y++) {
+                                for (let y = 0; y < Shared.CEILINGHEIGHT; y++) {
                                     const copytile = markeryz.clone();
-                                    copytile.userData = {
-                                        todelete: todelete
-                                    };
+                                    copytile.userData.todelete = todelete;
+                                    // copytile.userData = {
+                                        // todelete: todelete
+                                    // };
                                     copytile.visible = !todelete;
                                     markergroupyz.add(copytile);
                                     copytile.position.copy(markeryz.position);
@@ -777,12 +932,13 @@ function editorLoop() {
                                         if (z > 0) continue;
                                     }
                                 }
-                                for (let y = 0; y < Shared.SCALEY; y++) {
+                                for (let y = 0; y < Shared.CEILINGHEIGHT; y++) {
                                     const copytile = markerxy.clone();
                                     markergroupxy.add(copytile);
-                                    copytile.userData = {
-                                        todelete: todelete
-                                    };
+                                    copytile.userData.todelete = todelete;
+                                    // copytile.userData = {
+                                        // todelete: todelete
+                                    // };
                                     copytile.visible = !todelete;
                                     copytile.position.copy(markerxy.position);
                                     copytile.position.x += x;
@@ -955,9 +1111,12 @@ export function resetLevel() {
     tileYZGroup.clear();
     lightGroup.clear();
     lightHelperGroup.clear();
-    Shared.gridMapXY.clear();
-    Shared.gridMapXZ.clear();
-    Shared.gridMapYZ.clear();
+    clearGridMap(Shared.gridMapXY);
+    clearGridMap(Shared.gridMapXZ);
+    clearGridMap(Shared.gridMapYZ);
+    // Shared.gridMapXY.clear();
+    // Shared.gridMapXZ.clear();
+    // Shared.gridMapYZ.clear();
     Shared.gridLight.clear();
     reinitMarker();
     Shared.resetCamera();
@@ -968,23 +1127,39 @@ export function resetLevel() {
 }
 
 /*---------------------------------*/
+// clearGridMap
+// clear nested maps
+/*---------------------------------*/
+function clearGridMap(gridMapv) {
+    for (const innerMap of gridMapv.values()) {
+        if (innerMap instanceof Map) {
+            innerMap.clear(); // Clear the inner Map
+        }
+    }
+    gridMapv.clear(); // Clear the outer Map
+}
+
+/*---------------------------------*/
 // setAddMode
 /*---------------------------------*/
-function setAddMode(mode) {
+export function setAddMode(mode) {
+    console.log("setmode",mode);
     switch (mode) {
         case ADDPLANEMODE:
             currentAddMode = ADDPLANEMODE;
             showMarkerXZ = true;
-            AddBtn.classList.add("green");
-            AddLBtn.classList.remove("green");
             break;
         case ADDLIGHTMODE:
             currentAddMode = ADDLIGHTMODE;
             showMarkerXY = false;
             showMarkerYZ = false;
             showMarkerXZ = false;
-            AddBtn.classList.remove("green");
-            AddLBtn.classList.add("green");
+            break;
+        case ADDMESHMODE:
+            currentAddMode = ADDMESHMODE;
+            showMarkerXY = false;
+            showMarkerYZ = false;
+            showMarkerXZ = false;
             break;
     }
 }
@@ -1160,15 +1335,203 @@ function updateLoadProgression(ratio) {
 }
 
 /*---------------------------------*/
+// calculateBoundingBox
+/*---------------------------------*/
+export function calculateBoundingBox(gridMap) {
+    const halfDiv = Math.ceil(Shared.gridDivisions / 2);
+
+    let minX = halfDiv; // start at max possible index
+    let minY = 0;       // assuming Y goes 0..gridDivisions
+    let minZ = halfDiv;
+
+    let maxX = -halfDiv; // start at min possible index
+    let maxY = 0;
+    let maxZ = -halfDiv;
+
+    if (gridMap.size === 0) {
+        minX = -halfDiv;  // start at max possible index
+        minY = 0;        // assuming Y goes 0..gridDivisions
+        minZ = -halfDiv;
+        maxX = halfDiv;  // start at min possible index
+        maxY = Shared.CEILINGHEIGHT;
+        maxZ = halfDiv;
+    }
+
+    for (const key of gridMap.keys()) {
+        const { x, y, z } = Shared.parseGridKey(key);
+
+        // clamp to grid helper boundaries
+        const cx = Math.max(-halfDiv, Math.min(halfDiv, x));
+        const cy = Math.max(0, Math.min(Shared.CEILINGHEIGHT, y));
+        const cz = Math.max(-halfDiv, Math.min(halfDiv, z));
+
+        minX = Math.min(minX, cx);
+        minY = Math.min(minY, cy);
+        minZ = Math.min(minZ, cz);
+
+        maxX = Math.max(maxX, cx);
+        maxY = Math.max(maxY, cy);
+        maxZ = Math.max(maxZ, cz);
+    }
+
+    return {
+        min: { x: minX, y: minY, z: minZ },
+        max: { x: maxX, y: maxY, z: maxZ },
+        // size: {
+        //     x: maxX - minX + 1,
+        //     y: maxY - minY + 1,
+        //     z: maxZ - minZ + 1
+        // }
+    };
+
+}
+
+/*---------------------------------*/
+// bbToHex
+/*---------------------------------*/
+function bbToHex(bb) {
+    const { min, max } = bb;
+    const toHex = (v) => v.toString(16).padStart(2, '0'); // 2 digits per value
+    return [
+        toHex(min.x), toHex(min.y), toHex(min.z),
+        toHex(max.x), toHex(max.y), toHex(max.z)
+    ].join('');
+}
+
+/*---------------------------------*/
+// flattenGridMap
+/*---------------------------------*/
+export function flattenGridMap(gridMap, bbox) {
+    const { min, max } = bbox;
+    const result = [];
+
+    if (gridMap.size === 0) return [];
+
+    for (let z = min.z; z <= max.z; z++) {
+        for (let y = min.y; y <= max.y; y++) {
+            for (let x = min.x; x <= max.x; x++) {
+                const key = Shared.getGridKey(x, y, z);
+                const cell = gridMap.get(key); // might be undefined if empty
+
+                if (cell) {
+                    // Store the geometry.userData of all tiles in the cell
+                    const cellData = [];
+                    for (const [meshName, mesh] of cell.entries()) {
+                        cellData.push(mesh.geometry.userData?.uvmeshid || null);
+                    } result.push(cellData);
+                } else {
+                    result.push(null);
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+/*---------------------------------*/
+// compressFlattenedGrid
+/*---------------------------------*/
+export function compressFlattenedGrid(flatArray) {
+    if (!flatArray || flatArray.length === 0) return "";
+
+    const result = [];
+    let lastCell = null;
+    let count = 0;
+
+    let easyread = 0;
+    if (!easyread) {
+
+        const stringifyCell = (cell) => {
+            if (!cell || cell.length === 0) return "0000f";//0 means null
+            // Convert array of {meshName, uvName} to a short string per cell
+            return cell.map(c => `${c}`).join("e") + "f";
+        };
+
+        for (let i = 0; i <= flatArray.length; i++) {
+            const cell = flatArray[i] || null; // include final iteration
+            const cellStr = stringifyCell(cell);
+
+            if (cellStr === lastCell) {
+                count++;
+            } else {
+                if (lastCell !== null) {
+                    // push previous cell with repeat count
+                    result.push(`${lastCell}${count.toString(16).padStart(2, "0")}`);
+                }
+                lastCell = cellStr;
+                count = 1;
+            }
+        }
+
+        return result.join("");
+    }
+    else {//EASY READ FORMAT (DEBUG)
+
+        const stringifyCell = (cell) => {
+            if (!cell || cell.length === 0) return "(0)";//0 means null
+            // Convert array of {meshName, uvName} to a short string per cell
+            return "(" + cell.map(c => `${c}`).join(",") + ")";
+        };
+
+        for (let i = 0; i <= flatArray.length; i++) {
+            const cell = flatArray[i] || null; // include final iteration
+            const cellStr = stringifyCell(cell);
+
+            if (cellStr === lastCell) {
+                count++;
+            } else {
+                if (lastCell !== null) {
+                    // push previous cell with repeat count
+                    result.push(`${lastCell}${count}`);
+                }
+                lastCell = cellStr;
+                count = 1;
+            }
+        }
+
+        return result.join(",");
+    }
+}
+
+/*---------------------------------*/
 // saveLevel
 /*---------------------------------*/
 function saveLevel() {
-    const mergedData = {};
-    mergedData["XY"] = groupPlanesByMaterial(tileXYGroup);
-    mergedData["XZ"] = groupPlanesByMaterial(tileXZGroup);
-    mergedData["YZ"] = groupPlanesByMaterial(tileYZGroup);
 
-    mergedData["LIGHTS"] = groupLights();
+    //1) calculate bounding box
+    const bbxz = calculateBoundingBox(gridMapXZ);
+    const bbyz = calculateBoundingBox(gridMapYZ);
+    const bbxy = calculateBoundingBox(gridMapXY);
+
+    const gridMapXZflattened = flattenGridMap(gridMapXZ,bbxz);
+    const gridMapYZflattened = flattenGridMap(gridMapYZ,bbyz);
+    const gridMapXYflattened = flattenGridMap(gridMapXY,bbxy);
+
+    const mergedData = {};
+    const gridMapXZcompressed = compressFlattenedGrid(gridMapXZflattened);
+    // console.log("gridMapXZcompressed",gridMapXZcompressed);
+    // return;
+    const gridMapYZcompressed = compressFlattenedGrid(gridMapYZflattened);
+    const gridMapXYcompressed = compressFlattenedGrid(gridMapXYflattened);
+    mergedData["BBXZ"] = bbToHex(bbxz);
+    mergedData["BBYZ"] = bbToHex(bbyz);
+    mergedData["BBXY"] = bbToHex(bbxy);
+    if (gridMapXZcompressed) mergedData["XY"] = gridMapXZcompressed;
+    if (gridMapYZcompressed) mergedData["XZ"] = gridMapYZcompressed;
+    if (gridMapXYcompressed) mergedData["YZ"] = gridMapXYcompressed;
+    // let json = JSON.stringify(mergedData);
+    let json = JSON.stringify(mergedData, null, 2);
+    downloadJson(json, "grouped_planes.json");
+
+    return;
+
+    // const mergedData = {};
+    // mergedData["XY"] = groupPlanesByMaterial(tileXYGroup);
+    // mergedData["XZ"] = groupPlanesByMaterial(tileXZGroup);
+    // mergedData["YZ"] = groupPlanesByMaterial(tileYZGroup);
+
+    // mergedData["LIGHTS"] = groupLights();
 
     //compress level to a string you  can feed to the url so 
     //players can share their creations
@@ -1186,29 +1549,29 @@ function saveLevel() {
     // let compressedJsonString = compressJson(mergedData);
     // console.log("compressedJsonString", compressedJsonString);
 
-    let json = JSON.stringify(mergedData, null, 2);
+    // let json = JSON.stringify(mergedData, null, 2);
 
-    // Compact all "position": [ ... ] lines to single-line arrays
-    json = json.replace(/"position": \[\s*([\s\S]*?)\s*\]/g, (match, content) => {
-        const compact = content
-            .split(/\s*,?\s*\n\s*/g)  // split lines and trim
-            .map(s => s.trim())
-            .filter(s => s !== "")    // remove empty lines
-            .join(", ");
-        return `"position": [${compact}]`;
-    });
+    // // Compact all "position": [ ... ] lines to single-line arrays
+    // json = json.replace(/"position": \[\s*([\s\S]*?)\s*\]/g, (match, content) => {
+    //     const compact = content
+    //         .split(/\s*,?\s*\n\s*/g)  // split lines and trim
+    //         .map(s => s.trim())
+    //         .filter(s => s !== "")    // remove empty lines
+    //         .join(", ");
+    //     return `"position": [${compact}]`;
+    // });
 
-    json = json.replace(/\{([^{}]*position[^{}]*)\}/g, (match, content) => {
-        // Compact inner content: remove newlines + multiple spaces
-        const compactContent = content
-            .replace(/\s*\n\s*/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
+    // json = json.replace(/\{([^{}]*position[^{}]*)\}/g, (match, content) => {
+    //     // Compact inner content: remove newlines + multiple spaces
+    //     const compactContent = content
+    //         .replace(/\s*\n\s*/g, ' ')
+    //         .replace(/\s+/g, ' ')
+    //         .trim();
 
-        return `{${compactContent}}`;
-    });
+    //     return `{${compactContent}}`;
+    // });
 
-    downloadJson(json, "grouped_planes.json");
+    // downloadJson(json, "grouped_planes.json");
 }
 
 /*---------------------------------*/
@@ -1276,16 +1639,16 @@ function downloadJson(data, filename) {
 /*---------------------------------*/
 // setUVsByName
 /*---------------------------------*/
-function setUVsByName(geom, uvname) {
+function    setUVsByName(geom, uvname, meshname) {
     const tilecoordx = (Shared.atlasUVs[uvname]?.x || 0);
     const tilecoordy = (Shared.atlasUVs[uvname]?.y || 0);
-    setUVs(geom, tilecoordx, tilecoordy, uvname);
+    setUVs(geom, tilecoordx, tilecoordy, uvname, meshname);
 }
 
 /*---------------------------------*/
 // setUVs
 /*---------------------------------*/
-function setUVs(geom, xt, yt, name) {
+function setUVs(geom, xt, yt, uvname, meshname) {
 
     let uv = defaultGeom.attributes.uv.clone();//reinit the uvs
 
@@ -1311,7 +1674,17 @@ function setUVs(geom, xt, yt, name) {
     uv.needsUpdate = true;
 
     // Make sure UVs are an independent BufferAttribute
-    geom.name = name;
+    // geom.name = uvname;
+    geom.userData.uvname = uvname;
+    geom.userData.meshname = meshname;
+    geom.userData.uvmeshid = Shared.encodeID(
+        Shared.atlasUVsidx[uvname],
+        Shared.atlasMeshidx[meshname]
+    );
+    // geom.userData  = {
+        // uvname: uvname,
+        // meshname: meshname
+    // };
     geom.setAttribute('uv', uv);
 
 }
