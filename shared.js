@@ -37,7 +37,7 @@ const cameraOffsetZ = 2;
 export const cameraOffsetY = 1;
 
 // ceiling height
-export const SCALEY = 2;
+export const CEILINGHEIGHT = 2;
 
 // modes
 export const MODEEDITOR = 0;
@@ -60,9 +60,15 @@ const keys = {};
 export let resourcesDict = {};  //resources dictionary
 export let matDict       = {};  //material dictionary
 export let atlasDict     = {};  //atlas dictionary
-export let atlasArray    = [];  //material array (from dictionary)
+export let atlasUVsArray = [];  //material array (from dictionary)
+export let atlasUVsidx   = {};  //UV to index map (for fast lookup)
 export let atlasMat;
 export let atlasUVs;
+export let atlasMesh;
+export let atlasMeshArray = [];
+export let atlasMeshidx   = {};
+export let uvidBits       = 8;   //default
+export let meshidBits     = 8;   //default
 
 // Dynamically create a canvas element
 export const canvas    = document.getElementById('three-canvas');
@@ -104,7 +110,24 @@ export async function loadResources() {
     atlasDict  = resourcesDict.ATLAS.ATLAS0;
     atlasMat   = atlasDict.ATLASMATERIAL;
     atlasUVs   = atlasDict.UVS;
-    atlasArray = Object.entries(atlasUVs);
+    atlasUVsArray = Object.entries(atlasUVs);
+    atlasUVsArray.forEach(([key], idx) => {
+        atlasUVsidx[key] = idx;// key -> index map for fast lookup
+    });
+    atlasMesh  = resourcesDict.MESHATLAS.ATLAS0;
+    atlasMeshArray = Object.entries(atlasMesh);
+    atlasMeshArray.forEach(([key], idx) => {
+        atlasMeshidx[key] = idx;// key -> index map for fast lookup
+    });
+    // uvidBits   = Math.ceil(Math.log2(atlasUVsArray.length));
+    // meshidBits = Math.ceil(Math.log2(atlasMeshArray.length));
+    //support up to 256 textures and 256 meshes
+    //64k combinations
+    uvidBits = 8;
+    meshidBits = 8;
+    if(atlasUVsArray.length > 256) console.error("max textures supported is 256")
+    if(atlasMeshArray.length > 256) console.error("max meshes supported is 256")
+
 }
 
 /*---------------------------------------------------------*/
@@ -250,6 +273,10 @@ export function onKeyDownEvent(event){
     else if (keyPressOnceToActionMap[event.code])
         Actions[keyPressOnceToActionMap[event.code]] = !keys[event.code];
 
+    if (event.code === "Tab") {
+        event.preventDefault(); // stop browser from changing focus
+    }
+
     keys[event.code] = true;//true all the time when key is pressed
 }
 
@@ -282,10 +309,40 @@ export function releaseSingleEventActions() {
 }
 
 /*---------------------------------*/
+// encodeID
+/*---------------------------------*/
+export function encodeID(uvid, meshid) {
+    const encoded = ((uvid << meshidBits) | meshid) + 1; //0 is reserved to null
+    return encoded.toString(16).padStart(4, "0"); // hex string, always 4 hex digits
+}
+
+/*---------------------------------*/
+// decodeID
+/*---------------------------------*/
+export function decodeID(hexStr) {
+    const encoded = parseInt(hexStr, 16); // back to integer
+    if (encoded === 0) return null; // reserved null
+
+    const shifted = encoded - 1;
+    const meshidMask = (1 << meshidBits) - 1;
+    const meshid = shifted & meshidMask;
+    const uvid   = shifted >> meshidBits;
+    return { uvid, meshid };
+}
+
+/*---------------------------------*/
 // getGridKey
 /*---------------------------------*/
 export function getGridKey(x, y = 0, z) {
     return `${x},${y},${z}`;
+}
+
+/*---------------------------------*/
+// parseGridKey
+/*---------------------------------*/
+export function parseGridKey(key) {
+    const [x, y, z] = key.split(',').map(Number);
+    return { x, y, z };
 }
 
 /*---------------------------------*/
