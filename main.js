@@ -95,6 +95,7 @@ async function setupAndStart() {
 
         //setup editor scene
         Editor.setupEditor();
+        EditorUI.setupEditorUI();
 
         //wire the callbacks here to avoid circular dependencies
         Shared.setStartEditorLoop(Editor.startEditorLoop);
