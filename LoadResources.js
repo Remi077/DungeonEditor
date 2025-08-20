@@ -181,10 +181,10 @@ function loadMeshAtlases(jsonData) {
         }
         // return null;
         return loadMeshAtlas(loader, data.url).then(meshes => {
-            return [key, meshes]; // Return the texture
+            return [key, meshes]; // Return the Mesh
         });
     });
-    // Wait for all images to load and return the results
+    // Wait for all Meshes to load and return the results
     return Promise.all(loadPromises).then(results => {
         return Object.fromEntries(results); // Convert back to a dictionary { key: sprite/texture }
     });
@@ -203,6 +203,9 @@ function loadMeshAtlas(loader, src) {
 
                 scene.traverse((child) => {
                     if (child.isMesh) {
+                        // child.scale.set(0.5, 0.5, 0.5);
+                        // child.geometry.translate(1,0,1);
+                        child.geometry.scale(0.5, 0.5, 0.5);
                         meshMap[child.name] = child;
                     }
                 });
