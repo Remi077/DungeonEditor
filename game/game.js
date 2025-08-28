@@ -70,6 +70,7 @@ export function stopGameLoop() {
 // gameLoop
 /*---------------------------------*/
 function gameLoop() {
+    const scene = Shared.scene;
     
     if (!Shared.editorState.gameRunning) return;
 
