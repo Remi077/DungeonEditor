@@ -29,11 +29,9 @@ const NUMMODES = 5;
 let editorId = null;
 export let Actions = {};
 
-let defaultGeom;
+// let defaultGeom;
 let markerGeom;
-let currentGeomIndex = 0;
-let currentUVName = "";
-let currentMeshName="";
+let currentUVIndex = 0;
 let currentMeshIndex = 0;
 
 // groups holding plane tiles
@@ -165,21 +163,14 @@ Shared.renderer.setSize(Shared.container.clientWidth, Shared.container.clientHei
 // setMeshPosition
 /*---------------------------------*/
 function setMeshPosition() {
-    // markerxz.position.set(0.5, 0, 0.5);   //relative x,y,z
-    // markerxz.rotation.x = Math.PI / 2;  //horizontal plane (facing sky)
-
-    // markeryz.position.set(0, 0.5, 0.5);
-    // markeryz.rotation.y = Math.PI / 2;  //left plane
-
-    // markerxy.position.set(0.5, 0.5, 0);  //front plane (facing you)
-
-
+    markerxz.rotation.y = Math.PI;  //relative x,y,z
     markerxz.position.set(0.5, 0, 0.5);  //relative x,y,z
 
+    markeryz.rotation.x = -Math.PI/2;   //left plane
     markeryz.rotation.z = Math.PI / 2;   //left plane
     markeryz.position.set(0, 0.5, 0.5);   
 
-    markerxy.rotation.x = Math.PI / 2;   //left plane
+    markerxy.rotation.x = -Math.PI / 2;   //left plane
     markerxy.position.set(0.5, 0.5, 0);  //front plane (facing you)
 }
 
@@ -187,6 +178,7 @@ function setMeshPosition() {
 // setupEditor
 /*---------------------------------*/
 let scene;
+let sceneGeometryDict;
 let gridMapXZ; 
 let gridMapYZ; 
 let gridMapXY; 
@@ -195,13 +187,12 @@ export function setupEditor() {
     //setup local references to be able to watch them
     //in debugger
     scene = Shared.scene;
+    sceneGeometryDict = Shared.sceneGeometryDict;
     gridMapXZ = Shared.gridMapXZ;
     gridMapYZ = Shared.gridMapYZ;
     gridMapXY = Shared.gridMapXY;
 
-    currentUVName = Shared.atlasUVsArray[0][0];
-    currentMeshName = Shared.atlasMeshArray[0][0];
-
+    Shared.sceneGeometryDict.clear();
 
     //start in add plane mode
     setAddMode(ADDPLANEMODE);
@@ -247,16 +238,13 @@ export function setupEditor() {
     markerremovematerial.name = "markerremovematerial";
 
     // MARKER MESH
-    // defaultGeom = 'WALL' in atlasDict ? atlasDict.WALL.geometry : Object.values(atlasDict)[0];
-    // defaultGeom = new THREE.PlaneGeometry(1, 1);//TODO: Shared.cellSize instead of 1?
-    // markerGeom = defaultGeom.clone();
-    // setUVsByName(markerGeom, "WALL");
+    markerGeom = generateDefaultGeometry();
 
     //by default
     markerxz = new THREE.Mesh(markerGeom, markerxzmaterial);
     markeryz = new THREE.Mesh(markerGeom, markeryzmaterial);
     markerxy = new THREE.Mesh(markerGeom, markerxymaterial);
-    // setMeshPosition();
+    setMeshPosition();
 
     markerxz.name = "markerxz"
     markeryz.name = "markeryz"
@@ -270,10 +258,6 @@ export function setupEditor() {
     markergroupxz.visible = showMarkerXZ;
     markergroupyz.visible = showMarkerYZ;
     markergroupxy.visible = showMarkerXY;
-
-    setMesh("Plane");//by default
-    setMaterial(Shared.atlasUVsArray[0][0]);//first material index by default
-    // setMaterial("WALL");//by default
 
     markergroupxz.add(markerxz.clone());
     markergroupyz.add(markeryz.clone());
@@ -394,27 +378,20 @@ function prevMaterial() {
     toggleMaterial(-1);
 }
 
-export function setCurrentGeomIndex(i){currentGeomIndex = i;}
+export function setCurrentUVIndex(i){currentUVIndex = i;}
+export function getCurrentUVIndex(){return currentUVIndex;}
 
 function toggleMaterial(increment) {
     let l = Shared.atlasUVsArray.length;
-    currentGeomIndex = (((currentGeomIndex + increment) % l) + l) % l;
-    let currentName = Shared.atlasUVsArray[currentGeomIndex][0];
-    setMaterial(currentName);
+    currentUVIndex = (((currentUVIndex + increment) % l) + l) % l;
+    let currentName = Shared.atlasUVsArray[currentUVIndex][0];
+    setMesh(currentUVIndex,currentMeshIndex);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
         detail: { field: "MaterialChange", value: currentName },
         bubbles: true // optional, allows event to bubble up
     });
     document.dispatchEvent(event);
-}
-
-export function setMaterial(name) {
-    console.log(name);
-    currentUVName=name;
-    setUVsByName(markerGeom, name, currentMeshName);
-    reinitMarker();
-    Shared.editorState.renderOneFrame = true;
 }
 
 /*---------------------------------*/
@@ -425,12 +402,13 @@ function nextMesh(){
 }
 
 export function setCurrentMeshIndex(i){currentMeshIndex = i;}
+export function getCurrentMeshIndex(){return currentMeshIndex;}
 
 function toggleMesh(increment){
     let l = Shared.atlasMeshArray.length;
     currentMeshIndex = (((currentMeshIndex + increment) % l) + l) % l;
     let currentName = Shared.atlasMeshArray[currentMeshIndex][0];
-    setMesh(currentName);
+    setMesh(currentUVIndex,currentMeshIndex);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
         detail: { field: "MeshChange", value: currentName },
@@ -439,24 +417,14 @@ function toggleMesh(increment){
     document.dispatchEvent(event);
 }
 
-export function setMesh(name) {
-    console.log(name);
+export function setMesh(uvid, meshid) {
 
-    //reassign defaultGeom, markerGeom and markerxy meshes
-    const newGeom = Shared.atlasMesh[name]?.geometry;
-    if (!newGeom) {
-        console.error(name,"is not a valid mesh name");
-        return;
-    }
-    currentMeshName = name;
-    defaultGeom = newGeom;
-    markerGeom = defaultGeom.clone();
-    setUVsByName(markerGeom, currentUVName, currentMeshName);
-    markerxz = new THREE.Mesh(markerGeom, markerxzmaterial);
-    markeryz = new THREE.Mesh(markerGeom, markeryzmaterial);
-    markerxy = new THREE.Mesh(markerGeom, markerxymaterial);
+    markerGeom.dispose();
+    markerGeom = generateGeometry(uvid,meshid);
 
-    setMeshPosition(markerxz,markeryz,markerxy);
+    markerxz.geometry = markerGeom;
+    markeryz.geometry = markerGeom;
+    markerxy.geometry = markerGeom;
 
     reinitMarker();
 
@@ -584,26 +552,32 @@ function placeTile(tile, gridmap, group) {
 // uniquifyGeometry
 /*---------------------------------*/
 function uniquifyGeometry(mesh) {
-    // clone the geometry to avoid having all meshes changing uvs with marker
-    const originalGeom = mesh.geometry;
-    const newGeom = mesh.geometry.clone();
+    const g = mesh.geometry;
+    const id = g.userData?.uvmeshid;
 
-    //.clone() creates new copy of these, avoid that
-    // still share the original vertex attributes like position/normal/index to minimize memory footprint
-    newGeom.setAttribute('position', originalGeom.getAttribute('position'));
-    newGeom.setAttribute('normal', originalGeom.getAttribute('normal'));
-    newGeom.setIndex(originalGeom.getIndex());
+    if (!id) {
+        console.error("uvmeshid not defined for mesh");
+        return;
+    }
 
-    //userData is shared with .clone(), avoid that
-    newGeom.userData = JSON.parse(JSON.stringify(originalGeom.userData));
+    // If we already have a cached geometry with this id
+    if (Shared.sceneGeometryDict.has(id)) {
+        const cachedg = Shared.sceneGeometryDict.get(id);
 
-    // Optional: explicitly clone UVs to be extra safe
-    // if (mesh.geometry.attributes.uv) {
-    //     newGeom.setAttribute('uv', mesh.geometry.attributes.uv.clone());
-    // }
+        // Reuse the cached one
+        mesh.geometry = cachedg;
 
-    mesh.geometry = newGeom;
+    } else {
+        // Otherwise clone this geometry to make it unique and store it in the dict
+        const clonedg = g.clone();
+        // reassign userData as we dont want to hold on a shared reference
+        clonedg.userData = { ...g.userData };
+        mesh.geometry = clonedg;
+        Shared.sceneGeometryDict.set(id, clonedg);
+    }
 }
+
+
 
 /*---------------------------------*/
 // onMouseClick
@@ -1114,14 +1088,12 @@ export function resetLevel() {
     clearGridMap(Shared.gridMapXY);
     clearGridMap(Shared.gridMapXZ);
     clearGridMap(Shared.gridMapYZ);
-    // Shared.gridMapXY.clear();
-    // Shared.gridMapXZ.clear();
-    // Shared.gridMapYZ.clear();
     Shared.gridLight.clear();
     reinitMarker();
     Shared.resetCamera();
-    // updateTileCount();
     Shared.editorState.renderOneFrame = true;//simply update once the Shared.canvas
+
+    Shared.sceneGeometryDict.clear();
 
     if (bakedMesh) bakedMesh.clear();//temp
 }
@@ -1223,6 +1195,46 @@ async function loadPlanesIntoScene(jsondata) {
 
     if (totalElements == 0) return;//popup alert here. catch format error too
 
+    // load the scene dictionary
+    let geomdata;
+    if ("GEOM" in jsondata) geomdata=jsondata["GEOM"];
+    if (geomdata.length % 4 !== 0) {
+        throw new Error("geomdata length must be a multiple of 4 (2 bytes per key).");
+    }
+    for (let i = 0; i < geomdata.length; i += 4) {
+        const uvmeshid_ = geomdata.slice(i, i + 4); // 4 hex nibbles (16 bits)
+        const { uvid, meshid } = Shared.decodeID(uvmeshid_);
+        //create the geometry for given uv+mesh and put it in the dict
+        const newgeom = generateGeometry(uvid,meshid);
+        Shared.sceneGeometryDict.set(uvmeshid_,newgeom);
+    }
+    const sceneGeometryDictArray = Array.from(Shared.sceneGeometryDict.entries());
+
+    // load the bounding box
+    const bb = {};
+    for (const key of ["BBXZ", "BBYZ", "BBXY"]) {
+        const c = jsondata[key];
+        if (c) bb[key] = hexToBB(c);
+    }
+
+    const planetoinfo = {
+        XZ: { g: gridMapXZ, m: markerxz, t: tileXZGroup },
+        YZ: { g: gridMapYZ, m: markeryz, t: tileYZGroup },
+        XY: { g: gridMapXY, m: markerxy, t: tileXYGroup }
+    };
+
+    for (const key of ["XZ", "YZ", "XY"]) {
+        const _hstr = jsondata[key];
+        const _bb = bb["BB" + key];
+        const { g: _gridmap, m: _marker, t: _tilegroup } = planetoinfo[key];
+        if (!_hstr || !_bb) continue;
+        loadFlattenedMap(_hstr,_bb,_gridmap,_marker,_tilegroup,sceneGeometryDictArray);
+    }
+
+
+    return;
+
+
     //this tile will be cloned during load
     loadingTile = new THREE.Mesh(
         markerGeom,
@@ -1242,12 +1254,6 @@ async function loadPlanesIntoScene(jsondata) {
 
 }
 
-// function updateTileCount() {
-//     tilecount = tileXZGroup.children.length +
-//         tileXYGroup.children.length +
-//         tileYZGroup.children.length;
-// }
-
 /*---------------------------------*/
 // loadPlaneIntoScene
 /*---------------------------------*/
@@ -1265,7 +1271,7 @@ async function loadPlaneIntoScene(jsondata, label, grid, marker, group) {
                 const tile = tiletoclone.clone();
                 tile.position.fromArray(data.position);
                 tile.rotation.copy(marker.rotation);
-                setUVsByName(tile.geometry, geomName);
+                // setUVsByName(tile.geometry, geomName);
                 placeTile(tile, grid, group);
                 loadedElements++;
 
@@ -1377,25 +1383,58 @@ export function calculateBoundingBox(gridMap) {
     return {
         min: { x: minX, y: minY, z: minZ },
         max: { x: maxX, y: maxY, z: maxZ },
-        // size: {
-        //     x: maxX - minX + 1,
-        //     y: maxY - minY + 1,
-        //     z: maxZ - minZ + 1
-        // }
     };
 
 }
 
 /*---------------------------------*/
-// bbToHex
+// bbToHex using two's complement
 /*---------------------------------*/
 function bbToHex(bb) {
     const { min, max } = bb;
-    const toHex = (v) => v.toString(16).padStart(2, '0'); // 2 digits per value
+
+    // encode a signed 8-bit integer into 2-digit hex
+    const toHex = (v) => {
+        if (v < -128 || v > 127) {
+            throw new RangeError(`Value ${v} is out of range for signed 8-bit integer (-128..127)`);
+        }
+        // force into range -128..255 and wrap with two's complement
+        let n = (v & 0xFF); 
+        return n.toString(16).padStart(2, '0');
+    };
+
     return [
         toHex(min.x), toHex(min.y), toHex(min.z),
         toHex(max.x), toHex(max.y), toHex(max.z)
     ].join('');
+}
+
+/*---------------------------------*/
+// hexToBB
+/*---------------------------------*/
+function hexToBB(hex) {
+    if (hex.length < 12) {
+        throw new Error("Hex string too short: need 12 chars for min+max (x,y,z)");
+    }
+
+    // helper: parse 2-digit hex into signed int8
+    const toSigned = (h) => {
+        const n = parseInt(h, 16);
+        return n > 127 ? n - 256 : n; // convert to signed 8-bit
+    };
+
+    return {
+        min: {
+            x: toSigned(hex.slice(0, 2)),
+            y: toSigned(hex.slice(2, 4)),
+            z: toSigned(hex.slice(4, 6)),
+        },
+        max: {
+            x: toSigned(hex.slice(6, 8)),
+            y: toSigned(hex.slice(8, 10)),
+            z: toSigned(hex.slice(10, 12)),
+        }
+    };
 }
 
 /*---------------------------------*/
@@ -1407,26 +1446,34 @@ export function flattenGridMap(gridMap, bbox) {
 
     if (gridMap.size === 0) return [];
 
-    for (let z = min.z; z <= max.z; z++) {
-        for (let y = min.y; y <= max.y; y++) {
+    // raster order is x,z,y (horizontal plane is XZ, up axis is Y)
+    for (let y = min.y; y <= max.y; y++) {
+        for (let z = min.z; z <= max.z; z++) {
             for (let x = min.x; x <= max.x; x++) {
                 const key = Shared.getGridKey(x, y, z);
                 const cell = gridMap.get(key); // might be undefined if empty
 
                 if (cell) {
-                    // Store the geometry.userData of all tiles in the cell
-                    const cellData = [];
-                    for (const [meshName, mesh] of cell.entries()) {
-                        cellData.push(mesh.geometry.userData?.uvmeshid || null);
-                    } result.push(cellData);
+                    const entries = Array.from(cell.entries());
+                    const cellData = []; // start fresh per cell
+
+                    for (let i = 0; i < entries.length; i++) {
+                        const [meshName, mesh] = entries[i];
+                        const index = sceneGeometryDictID[mesh.geometry.userData.uvmeshid]; // 11-bit value
+
+                        cellData.push(index);
+                    }
+
+                    result.push(cellData);
                 } else {
+                    // empty cell → push null (or [] if you prefer)
                     result.push(null);
                 }
             }
         }
     }
 
-    return result;
+    return result; // array of arrays (or nulls)
 }
 
 /*---------------------------------*/
@@ -1439,65 +1486,82 @@ export function compressFlattenedGrid(flatArray) {
     let lastCell = null;
     let count = 0;
 
-    let easyread = 0;
-    if (!easyread) {
-
-        const stringifyCell = (cell) => {
-            if (!cell || cell.length === 0) return "0000f";//0 means null
-            // Convert array of {meshName, uvName} to a short string per cell
-            return cell.map(c => `${c}`).join("e") + "f";
-        };
-
-        for (let i = 0; i <= flatArray.length; i++) {
-            const cell = flatArray[i] || null; // include final iteration
-            const cellStr = stringifyCell(cell);
-
-            if (cellStr === lastCell) {
-                count++;
-            } else {
-                if (lastCell !== null) {
-                    // push previous cell with repeat count
-                    result.push(`${lastCell}${count.toString(16).padStart(2, "0")}`);
-                }
-                lastCell = cellStr;
-                count = 1;
-            }
+    const stringifyCell = (cell) => {
+        if (!cell || cell.length === 0) {
+            // 0 means null/empty cell
+            return (0).toString(16).padStart(sceneGeometryHexWidth, "0");
         }
 
-        return result.join("");
-    }
-    else {//EASY READ FORMAT (DEBUG)
+        let str = "";
+        for (let i = 0; i < cell.length; i++) {
+            const encoded = cell[i];
 
-        const stringifyCell = (cell) => {
-            if (!cell || cell.length === 0) return "(0)";//0 means null
-            // Convert array of {meshName, uvName} to a short string per cell
-            return "(" + cell.map(c => `${c}`).join(",") + ")";
-        };
+            // extract geometry ID only
+            let geomId = encoded & (sceneGeometryMax - 1);
 
-        for (let i = 0; i <= flatArray.length; i++) {
-            const cell = flatArray[i] || null; // include final iteration
-            const cellStr = stringifyCell(cell);
-
-            if (cellStr === lastCell) {
-                count++;
-            } else {
-                if (lastCell !== null) {
-                    // push previous cell with repeat count
-                    result.push(`${lastCell}${count}`);
-                }
-                lastCell = cellStr;
-                count = 1;
+            // if this is the last element of the cell, set MSB
+            if (i === cell.length - 1) {
+                geomId |= (1 << sceneGeometryBitWidth);
             }
-        }
 
-        return result.join(",");
+            // append geometry ID as hex
+            str += geomId.toString(16).padStart(sceneGeometryHexWidth, "0");
+        }
+        return str;
+    };
+
+    for (let i = 0; i <= flatArray.length; i++) {
+        const cell = flatArray[i] || null; // include final iteration
+        const cellStr = stringifyCell(cell);
+
+        if (cellStr === lastCell && count < repeatCountMax) {
+            count++;
+        } else {
+            if (lastCell !== null) {
+                // push previous cell with repeat count
+                result.push(
+                    `${lastCell}${count.toString(16).padStart(repeatCountHexWidth, "0")}`
+                );
+            }
+            lastCell = cellStr;
+            count = 1;
+        }
     }
+
+    return result.join("");
 }
+
 
 /*---------------------------------*/
 // saveLevel
 /*---------------------------------*/
+let sceneGeometryDictID = {};
+const sceneGeometryBitWidth = 11;//2^11=2000 possible geometries, reserve one bit at the top to indicate "last" cell entry
+const sceneGeometryHexWidth = Math.ceil(sceneGeometryBitWidth/4);//2^11=2000 possible geometries, reserve one bit at the top to indicate "last" cell entry
+const sceneGeometryMax = 1<<sceneGeometryBitWidth;
+const repeatCountMax = 256;
+const repeatCountHexWidth = Math.log2(repeatCountMax)/4;
 function saveLevel() {
+
+    //0) build a uvmeshid->idx dict for fast lookup
+    if (Shared.sceneGeometryDict.size > 256){
+        console.error("sceneGeometryDict has more than 256 entries!");
+        return;
+    }
+    sceneGeometryDictID = {};
+    let idx = 1;//0 is reserved to null object
+    for (const key of Shared.sceneGeometryDict.keys()) {
+        if (idx >= sceneGeometryMax) {
+            throw new RangeError("sceneGeometryDict has more than 255 entries (2-hex limit exceeded)");
+        }
+        sceneGeometryDictID[key] = idx.toString(16).padStart(sceneGeometryHexWidth, "0");//3 hex, 11 bits, 2k possible
+        idx++;
+    }
+    // store the sceneGeometryDict
+    const keys = Array.from(Shared.sceneGeometryDict.keys());
+    // concatenate into one long hex string
+    const hexString = keys.join("");
+    //TODO: convert to bytes then to base64?
 
     //1) calculate bounding box
     const bbxz = calculateBoundingBox(gridMapXZ);
@@ -1510,68 +1574,22 @@ function saveLevel() {
 
     const mergedData = {};
     const gridMapXZcompressed = compressFlattenedGrid(gridMapXZflattened);
-    // console.log("gridMapXZcompressed",gridMapXZcompressed);
-    // return;
     const gridMapYZcompressed = compressFlattenedGrid(gridMapYZflattened);
     const gridMapXYcompressed = compressFlattenedGrid(gridMapXYflattened);
+
+    mergedData["GEOM"] = hexString;
     mergedData["BBXZ"] = bbToHex(bbxz);
     mergedData["BBYZ"] = bbToHex(bbyz);
     mergedData["BBXY"] = bbToHex(bbxy);
-    if (gridMapXZcompressed) mergedData["XY"] = gridMapXZcompressed;
-    if (gridMapYZcompressed) mergedData["XZ"] = gridMapYZcompressed;
-    if (gridMapXYcompressed) mergedData["YZ"] = gridMapXYcompressed;
+    if (gridMapXZcompressed) mergedData["XZ"] = gridMapXZcompressed;
+    if (gridMapYZcompressed) mergedData["YZ"] = gridMapYZcompressed;
+    if (gridMapXYcompressed) mergedData["XY"] = gridMapXYcompressed;
     // let json = JSON.stringify(mergedData);
     let json = JSON.stringify(mergedData, null, 2);
+
+    console.log(json);
     downloadJson(json, "grouped_planes.json");
 
-    return;
-
-    // const mergedData = {};
-    // mergedData["XY"] = groupPlanesByMaterial(tileXYGroup);
-    // mergedData["XZ"] = groupPlanesByMaterial(tileXZGroup);
-    // mergedData["YZ"] = groupPlanesByMaterial(tileYZGroup);
-
-    // mergedData["LIGHTS"] = groupLights();
-
-    //compress level to a string you  can feed to the url so 
-    //players can share their creations
-    //not a priority at the moment
-    //(idea dont store the floor+ceiling)
-    //(idea store compressed tiles: bounding boxes + tile*iterations
-    //instead of every single tile coordinate)
-    //(idea store compressed bit formats instead of raw data)
-    //(idea final output in base64 6 bits per character)
-    //url max length is ~2000 chara so 1500 bytes
-    //if one tile is 3 bytes thats 500 tiles more or less
-    //not big enough...
-    //although position is 0-127 for x/z and 0-2 for Z
-    //so 7+7+2=16 bits or 2 bytes so could be ~800 tiles
-    // let compressedJsonString = compressJson(mergedData);
-    // console.log("compressedJsonString", compressedJsonString);
-
-    // let json = JSON.stringify(mergedData, null, 2);
-
-    // // Compact all "position": [ ... ] lines to single-line arrays
-    // json = json.replace(/"position": \[\s*([\s\S]*?)\s*\]/g, (match, content) => {
-    //     const compact = content
-    //         .split(/\s*,?\s*\n\s*/g)  // split lines and trim
-    //         .map(s => s.trim())
-    //         .filter(s => s !== "")    // remove empty lines
-    //         .join(", ");
-    //     return `"position": [${compact}]`;
-    // });
-
-    // json = json.replace(/\{([^{}]*position[^{}]*)\}/g, (match, content) => {
-    //     // Compact inner content: remove newlines + multiple spaces
-    //     const compactContent = content
-    //         .replace(/\s*\n\s*/g, ' ')
-    //         .replace(/\s+/g, ' ')
-    //         .trim();
-
-    //     return `{${compactContent}}`;
-    // });
-
-    // downloadJson(json, "grouped_planes.json");
 }
 
 /*---------------------------------*/
@@ -1636,55 +1654,106 @@ function downloadJson(data, filename) {
     URL.revokeObjectURL(url);
 }
 
-/*---------------------------------*/
-// setUVsByName
-/*---------------------------------*/
-function    setUVsByName(geom, uvname, meshname) {
-    const tilecoordx = (Shared.atlasUVs[uvname]?.x || 0);
-    const tilecoordy = (Shared.atlasUVs[uvname]?.y || 0);
-    setUVs(geom, tilecoordx, tilecoordy, uvname, meshname);
+function generateDefaultGeometry(){
+    return generateGeometry(0,0);
 }
 
 /*---------------------------------*/
-// setUVs
+// generateGeometry
 /*---------------------------------*/
-function setUVs(geom, xt, yt, uvname, meshname) {
+function generateGeometry(uvid,meshid) {
+    let m = (Shared.atlasMeshArray[meshid][1]?.geometry).clone();
+    let uv = m.attributes.uv.clone();
 
-    let uv = defaultGeom.attributes.uv.clone();//reinit the uvs
+    const xt = (Shared.atlasUVsArray[uvid][1]?.x || 0);
+    const yt = (Shared.atlasUVsArray[uvid][1]?.y || 0);
 
-    const tilesPerRow = Shared.atlasDict?.NUMX || 8;
-    const tilesPerCol = Shared.atlasDict?.NUMY || 8;
-
-    const scalex = 1 / tilesPerRow; // 0.125
-    const scaley = 1 / tilesPerCol; // 0.125
-
-    const offsetX = xt * scalex;
-    const offsetY = yt * scaley;
+    const offsetX = xt * Shared.uvInfo.uvscalex;
+    const offsetY = yt * Shared.uvInfo.uvscaley;
     for (let i = 0; i < uv.count; i++) {
         let x = uv.getX(i);
         let y = uv.getY(i);
         // Scale down to tile size
-        x = x * scalex;
-        y = y * scaley;
+        x = x * Shared.uvInfo.uvscalex;
+        y = y * Shared.uvInfo.uvscaley;
         // Offset to desired tile
         x += offsetX;
         y += offsetY;
         uv.setXY(i, x, y);
     }
     uv.needsUpdate = true;
+    m.attributes.uv = uv;
 
-    // Make sure UVs are an independent BufferAttribute
-    // geom.name = uvname;
-    geom.userData.uvname = uvname;
-    geom.userData.meshname = meshname;
-    geom.userData.uvmeshid = Shared.encodeID(
-        Shared.atlasUVsidx[uvname],
-        Shared.atlasMeshidx[meshname]
-    );
-    // geom.userData  = {
-        // uvname: uvname,
-        // meshname: meshname
-    // };
-    geom.setAttribute('uv', uv);
+    const newmeshname = Shared.atlasMeshArray[meshid][0];
+    const newuvname = Shared.atlasUVsArray[uvid][0];
+    const newuvmeshid = Shared.encodeID(uvid,meshid);
+    m.userData = {
+        uvname: newuvname,
+        meshname: newmeshname,
+        uvmeshid: newuvmeshid
+    };
 
+    return m;
+}
+
+function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
+    const sizeX = bb.max.x - bb.min.x + 1;
+    const sizeY = bb.max.y - bb.min.y + 1;
+    const sizeZ = bb.max.z - bb.min.z + 1;
+
+    let flatIndex = 0; // linear index across all tiles
+
+    let geomArray = [];
+    let p = 0;
+    while (p < hstr.length){
+
+        const encoded = parseInt(hstr.slice(p, p + sceneGeometryHexWidth), 16);
+        p += sceneGeometryHexWidth;
+        const last = (encoded >> sceneGeometryBitWidth) & 1;  // MSB (bit 12)
+        const geomIdx = encoded & (sceneGeometryMax - 1); 
+
+        if (geomIdx !== 0){
+            const geom    = sceneGeometryDictArray[geomIdx-1][1];//geomidx-1 because 0 is reserved to notile
+            geomArray.push(geom);
+            if (!last) continue;
+        }
+
+        const count   = parseInt(hstr.slice(p, p + repeatCountHexWidth), 16);
+        p+=repeatCountHexWidth;
+        if (geomIdx === 0) {//0 = no tiles
+            flatIndex+=count;
+            continue;
+        }
+
+        for (let c = 0; c < count; c++, flatIndex++) {
+            // Compute 3D coordinates from flat index
+            // raster order is x,z,y
+            const y = Math.floor(flatIndex / (sizeX * sizeZ));
+            const z = Math.floor((flatIndex % (sizeX * sizeZ)) / sizeX);
+            const x = flatIndex % sizeX;
+
+            geomArray.forEach(geom => {
+                const mesh = new THREE.Mesh(geom, Shared.atlasMat);
+
+                mesh.position.set(
+                    (x + bb.min.x) * Shared.cellSize + marker.position.x,
+                    (y + bb.min.y) * Shared.cellSize + marker.position.y,
+                    (z + bb.min.z) * Shared.cellSize + marker.position.z
+                );
+
+                mesh.rotation.copy(marker.rotation);
+
+                placeTile(mesh, gridmap, tilegroup);
+            })
+        }
+        geomArray = [];
+    }
+}
+
+export function setWallCeilingHeight(height){
+    console.log("wall ceiling height is",height);
+}
+
+export function setFloorCeilingHeight(height){
+    console.log("floor ceiling height is",height);
 }
