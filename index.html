@@ -141,6 +141,8 @@
         }
 
         .tab-content {
+            display: flex;
+            flex-direction: column;
             max-height: 0;
             overflow: hidden;
             padding: 0 10px;
@@ -153,34 +155,16 @@
             padding: 10px;
         }
 
+        .form-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
+        .form-row label {
+            min-width: 90px; /* keeps labels aligned */
+        }        
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
         button {
             padding: 10px;
             background-color: #444;
@@ -234,8 +218,28 @@
                 <div class="tab-header" data-mode="0">+ Add Planes (1)</div>
                 <div class="tab-content">
                     <!-- <button id="AddBtn">Add Planes (1)</button> -->
-                    <select id="matSelect"></select> <!-- TODO: this is a simple combobox for the moment -->
-                    <select id="meshSelect"></select> <!-- TODO: this is a simple combobox for the moment -->
+                    <!-- <select id="matSelect"></select> TODO: this is a simple combobox for the moment -->
+                    <div class="form-row">
+                        <label for="matSelect">Material:</label>
+                        <select id="matSelect"></select>
+                    </div>
+                    <div class="form-row">
+                        <label for="meshSelect">Mesh:</label>
+                        <select id="meshSelect"></select>
+                    </div>
+                    <div class="form-row">
+                        <label for="wallHeightSelect">Wall Height:</label>
+                        <select id="wallHeightSelect"></select>
+                    </div>
+                    <div class="form-row">
+                        <label for="floorHeightSelect">floor Height:</label>
+                        <select id="floorHeightSelect"></select>
+                    </div>
+                    <!-- Checkboxes -->
+                    <label><input type="checkbox" id="ceiling"> ceiling</label>
+                    <label><input type="checkbox" id="leftwall" checked> leftwall</label>
+                    <label><input type="checkbox" id="rightwall" checked> rightwall</label>
+                    <label><input type="checkbox" id="floor" checked> floor</label>
                 </div>
             </div>
 
