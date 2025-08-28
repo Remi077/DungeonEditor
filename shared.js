@@ -33,6 +33,7 @@ export const EPSILON = 0.01;
 export const moveSpeed = 5;
 
 // camera offset position
+const cameraOffsetX = 2;
 const cameraOffsetZ = 2;
 export const cameraOffsetY = 1;
 
@@ -67,8 +68,12 @@ export let atlasUVs;
 export let atlasMesh;
 export let atlasMeshArray = [];
 export let atlasMeshidx   = {};
-export let uvidBits       = 8;   //default
-export let meshidBits     = 8;   //default
+export let uvidBits       = 8;  //default
+export let meshidBits     = 8;  //default
+export const sceneGeometryDict = new Map();
+
+//uv info
+export const uvInfo = {};
 
 // Dynamically create a canvas element
 export const canvas    = document.getElementById('three-canvas');
@@ -101,7 +106,7 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = true;
+    let online = false;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
@@ -128,6 +133,11 @@ export async function loadResources() {
     if(atlasUVsArray.length > 256) console.error("max textures supported is 256")
     if(atlasMeshArray.length > 256) console.error("max meshes supported is 256")
 
+    uvInfo.uvtilesPerRow = atlasDict?.NUMX || 8;
+    uvInfo.uvtilesPerCol = atlasDict?.NUMY || 8;
+    uvInfo.uvscalex = 1 / uvInfo.uvtilesPerRow; // 0.125
+    uvInfo.uvscaley = 1 / uvInfo.uvtilesPerCol; // 0.125
+        
 }
 
 /*---------------------------------------------------------*/
@@ -227,7 +237,7 @@ export function setPause(value) {
 /*---------------------------------*/
 export function resetCamera() {
     pitchObject.rotation.set(0, 0, 0);
-    yawObject.position.set(0, cameraOffsetY, cameraOffsetZ);
+    yawObject.position.set(cameraOffsetX, cameraOffsetY, cameraOffsetZ);
     yawObject.rotation.set(0, 0, 0);
 }
 
@@ -385,3 +395,4 @@ export function onMouseMove(event) {
     pitchObject.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, pitchObject.rotation.x));
 
 }
+
