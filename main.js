@@ -12,7 +12,7 @@ import * as Game from './game/game.js';
 /*-----------------------------------------------------*/
 
 // revision hash
-const revision = "0.3"; // Replace with actual Git hash
+const revision = "0.2"; // Replace with actual Git hash
 
 // Add it to the div
 document.getElementById('revision-info').innerText = `Version: ${revision}`;
