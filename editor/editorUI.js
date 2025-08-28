@@ -39,18 +39,28 @@ StartBtn.addEventListener('click', () => { Shared.toggleGameMode(); });
 /*-----------------------------------------------------*/
 const matSelect = document.getElementById("matSelect");
 const meshSelect = document.getElementById("meshSelect");
+const wallHeightSelect = document.getElementById("wallHeightSelect");
+const floorHeightSelect = document.getElementById("floorHeightSelect");
 
 /*-----------------------------------------------------*/
 // COMBOBOX LISTENER
 /*-----------------------------------------------------*/
 matSelect.addEventListener("change", (event) => {
-    Editor.setMaterial(event.target.value);
-    Editor.setCurrentGeomIndex(event.target.selectedIndex);
+    Editor.setCurrentUVIndex(event.target.selectedIndex);
+    Editor.setMesh(event.target.selectedIndex,Editor.getCurrentMeshIndex());
     console.log("event.target.selectedIndex",event.target.selectedIndex);
 });
 meshSelect.addEventListener("change", (event) => {
-    Editor.setMesh(event.target.value);
     Editor.setCurrentMeshIndex(event.target.selectedIndex);
+    Editor.setMesh(Editor.getCurrentUVIndex(), event.target.selectedIndex);
+});
+wallHeightSelect.addEventListener("change", (event) => {
+    const value = parseInt(event.target.value, 10); // convert string → integer
+    Editor.setWallCeilingHeight(value);
+});
+floorHeightSelect.addEventListener("change", (event) => {
+    const value = parseInt(event.target.value, 10); // convert string → integer
+    Editor.setFloorCeilingHeight(value);
 });
 
 /*-----------------------------------------------------*/
@@ -224,7 +234,7 @@ function expandHeader(header) {
 /*-----------------------------------------------------*/
 export function setupEditorUI() {
     // set material combobox
-    const matSelect = document.getElementById("matSelect");
+    // const matSelect = document.getElementById("matSelect");
     // fill combo with keys from matDict
     Object.keys(Shared.atlasUVs).forEach(key => {
         const option = document.createElement("option");
@@ -239,7 +249,7 @@ export function setupEditorUI() {
     // }
 
     // set mesh combobox
-    const meshSelect = document.getElementById("meshSelect");
+    // const meshSelect = document.getElementById("meshSelect");
     // fill combo with keys from atlasMesh
     Object.keys(Shared.atlasMesh).forEach(key => {
         const option = document.createElement("option");
@@ -247,6 +257,24 @@ export function setupEditorUI() {
         option.textContent = key;  // visible label
         meshSelect.appendChild(option);
     });
+
+    // set mesh combobox
+    // const heightSelect = document.getElementById("heightSelect");
+    // fill combo with keys from atlasMesh
+    for (let i = 1; i <= 4; i++) {
+        const option = document.createElement("option");
+        option.value = i;
+        option.textContent = i;  // what the user sees
+        wallHeightSelect.appendChild(option);
+    }
+    wallHeightSelect.value = "2";//default
+
+    for (let i = 0; i <= 4; i++) {
+        const option = document.createElement("option");
+        option.value = i;
+        option.textContent = i;  // what the user sees
+        floorHeightSelect.appendChild(option);
+    }
 
 }
 
