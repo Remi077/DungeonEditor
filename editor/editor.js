@@ -48,6 +48,7 @@ let lightHelperGroup = new THREE.Group(); lightHelperGroup.name = "lightHelperGr
 let selectValid         = false;
 let prevSelectValid     = false;
 let selectX             = 0;
+let selectY             = 0;
 let selectZ             = 0;
 let prevSelectX         = 99999;
 let prevSelectZ         = 99999;
@@ -97,7 +98,7 @@ export let ActionToKeyMap = {
     setAddPlaneMode: { key: 'Digit1', OnPress: true },
     setAddLightMode: { key: 'Digit2', OnPress: true },
     setAddMeshMode : { key: 'Digit3', OnPress: true },
-    pause          : { key: 'KeyP', OnRelease: true },   //triggered once only at release
+    pause          : { key: 'KeyP', OnRelease: true },     //triggered once only at release
     prevMaterial   : { key: 'KeyQ', OnPress: true },
     nextMaterial   : { key: 'KeyE', OnPress: true },
     nextMesh       : { key: 'Tab', OnPress: true },
@@ -105,6 +106,8 @@ export let ActionToKeyMap = {
     bakeLevel      : { key: 'KeyB', OnPress: true },
     loadLevel      : { key: 'KeyL', OnPress: true },
     startGame      : { key: 'KeyG', OnPress: true },
+    floorUp        : { key: 'PageUp', OnPress: true },
+    floorDown      : { key: 'PageDown', OnPress: true },
 };
 
 
@@ -589,7 +592,7 @@ export function onMouseClick(event) {
     if (!selectValid) return;
 
     if (currentAddMode == ADDLIGHTMODE) {
-        let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, 0.5, selectZ + 0.5));
+        let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, selectY + 0.5, selectZ + 0.5));
         placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
         return;
     }
@@ -658,7 +661,7 @@ function reinitMarker() {
     //RED
     markergroupxz.clear();
     markergroupxz.add(markerxz.clone());
-    markergroupxz.position.set(selectX, Shared.EPSILON, selectZ);
+    markergroupxz.position.set(selectX, selectY+Shared.EPSILON, selectZ);
 
     //GREEN
     markergroupyz.clear();
@@ -670,22 +673,22 @@ function reinitMarker() {
     //based on height swap material from atlasMat to atlasMapAO
     //this enables better separation
     markergroupyz.add(markeryz.clone());
-    for (let y = 1; y < Shared.CEILINGHEIGHT; y++) {
+    for (let y = 1; y < Shared.wallHeight; y++) {
         const t = markeryz.clone();
         t.position.y += y;
         markergroupyz.add(t);
     }
-    markergroupyz.position.set(selectX, Shared.EPSILON, selectZ);
+    markergroupyz.position.set(selectX, selectY+Shared.EPSILON, selectZ);
 
     //BLUE
     markergroupxy.clear();
     markergroupxy.add(markerxy.clone());
-    for (let y = 1; y < Shared.CEILINGHEIGHT; y++) {
+    for (let y = 1; y < Shared.wallHeight; y++) {
         const t = markerxy.clone();
         t.position.y += y;
         markergroupxy.add(t);
     }
-    markergroupxy.position.set(selectX, Shared.EPSILON, selectZ);
+    markergroupxy.position.set(selectX, selectY+Shared.EPSILON, selectZ);
 
     //reinit bbox
     boxselectModeendX = boxselectModestartX;
@@ -763,7 +766,17 @@ function movePlayer(delta) {
         document.dispatchEvent(event);
         setAddMode(ADDMESHMODE);
     };
-    
+    if (Actions.floorUp || Actions.floorDown) {
+        const inc = Actions.floorDown ? -1 : 1;
+        const newFloorHeight = Math.max(Math.min((Shared.floorHeight + inc),Shared.FLOORHEIGHTMAX),0);
+        const event = new CustomEvent("UIChange", {
+            detail: { field: "FloorChange", value: newFloorHeight.toString() },
+            bubbles: true // optional, allows event to bubble up
+        });
+        document.dispatchEvent(event);
+        setFloorHeight(newFloorHeight);
+    }
+
 }
 
 /*---------------------------------*/
@@ -800,12 +813,14 @@ function editorLoop() {
 
         if (doesIntersect) {
             const point = intersects[0].point;
+            // console.log("intersectpoint",point);
             selectValid = true;
             markergroupxz.visible = showMarkerXZ;
             markergroupyz.visible = showMarkerYZ;
             markergroupxy.visible = showMarkerXY;
             // Convert world position to grid cell
             selectX = Math.floor(point.x / Shared.cellSize);
+            selectY = Shared.floorHeight;
             selectZ = Math.floor(point.z / Shared.cellSize);
 
             //UPDATE ONLY WHEN NEW CELL SELECTED
@@ -820,9 +835,9 @@ function editorLoop() {
 
                 if (!Shared.editorState.mouseIsDown) {
                     // slightly above floor to prevent z-fighting
-                    markergroupxz.position.set(selectX * Shared.cellSize, Shared.EPSILON, selectZ * Shared.cellSize);
-                    markergroupyz.position.set(selectX * Shared.cellSize, Shared.EPSILON, selectZ * Shared.cellSize);
-                    markergroupxy.position.set(selectX * Shared.cellSize, Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupxz.position.set(selectX * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupyz.position.set(selectX * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupxy.position.set(selectX * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
                 } else {
 
                     //UPDATE SELECTION BBOX
@@ -830,9 +845,9 @@ function editorLoop() {
                     boxselectModeendZ = selectZ;
 
                     //UPDATE MARKER POSITION
-                    markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                    markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                    markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
 
                     //CLEAR MARKER MESHES
                     markergroupxz.clear();
@@ -873,7 +888,7 @@ function editorLoop() {
                                         if (x > 0) continue;
                                     }
                                 }
-                                for (let y = 0; y < Shared.CEILINGHEIGHT; y++) {
+                                for (let y = 0; y < Shared.wallHeight; y++) {
                                     const copytile = markeryz.clone();
                                     copytile.userData.todelete = todelete;
                                     // copytile.userData = {
@@ -906,7 +921,7 @@ function editorLoop() {
                                         if (z > 0) continue;
                                     }
                                 }
-                                for (let y = 0; y < Shared.CEILINGHEIGHT; y++) {
+                                for (let y = 0; y < Shared.wallHeight; y++) {
                                     const copytile = markerxy.clone();
                                     markergroupxy.add(copytile);
                                     copytile.userData.todelete = todelete;
@@ -1359,7 +1374,7 @@ export function calculateBoundingBox(gridMap) {
         minY = 0;        // assuming Y goes 0..gridDivisions
         minZ = -halfDiv;
         maxX = halfDiv;  // start at min possible index
-        maxY = Shared.CEILINGHEIGHT;
+        maxY = Shared.CEILINGHEIGHTMAX;
         maxZ = halfDiv;
     }
 
@@ -1368,7 +1383,7 @@ export function calculateBoundingBox(gridMap) {
 
         // clamp to grid helper boundaries
         const cx = Math.max(-halfDiv, Math.min(halfDiv, x));
-        const cy = Math.max(0, Math.min(Shared.CEILINGHEIGHT, y));
+        const cy = Math.max(0, Math.min(Shared.CEILINGHEIGHTMAX, y));
         const cz = Math.max(-halfDiv, Math.min(halfDiv, z));
 
         minX = Math.min(minX, cx);
@@ -1541,7 +1556,7 @@ const sceneGeometryHexWidth = Math.ceil(sceneGeometryBitWidth/4);//2^11=2000 pos
 const sceneGeometryMax = 1<<sceneGeometryBitWidth;
 const repeatCountMax = 256;
 const repeatCountHexWidth = Math.log2(repeatCountMax)/4;
-function saveLevel() {
+export function saveLevel() {
 
     //0) build a uvmeshid->idx dict for fast lookup
     if (Shared.sceneGeometryDict.size > 256){
@@ -1696,6 +1711,9 @@ function generateGeometry(uvid,meshid) {
     return m;
 }
 
+/*---------------------------------*/
+// loadFlattenedMap
+/*---------------------------------*/
 function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
     const sizeX = bb.max.x - bb.min.x + 1;
     const sizeY = bb.max.y - bb.min.y + 1;
@@ -1750,10 +1768,21 @@ function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDic
     }
 }
 
-export function setWallCeilingHeight(height){
-    console.log("wall ceiling height is",height);
+/*---------------------------------*/
+// setWallHeight
+/*---------------------------------*/
+export function setWallHeight(height){
+    Shared.setWallHeight(height);
+    reinitMarker();
+    Shared.editorState.renderOneFrame = true;
 }
 
-export function setFloorCeilingHeight(height){
-    console.log("floor ceiling height is",height);
+/*---------------------------------*/
+// setFloorHeight
+/*---------------------------------*/
+export function setFloorHeight(height){
+    Shared.setFloorHeight(height);
+    floor.position.y = height;
+    reinitMarker();
+    Shared.editorState.renderOneFrame = true;
 }
