@@ -56,11 +56,11 @@ meshSelect.addEventListener("change", (event) => {
 });
 wallHeightSelect.addEventListener("change", (event) => {
     const value = parseInt(event.target.value, 10); // convert string → integer
-    Editor.setWallCeilingHeight(value);
+    Editor.setWallHeight(value);
 });
 floorHeightSelect.addEventListener("change", (event) => {
     const value = parseInt(event.target.value, 10); // convert string → integer
-    Editor.setFloorCeilingHeight(value);
+    Editor.setFloorHeight(value);
 });
 
 /*-----------------------------------------------------*/
@@ -167,6 +167,18 @@ document.addEventListener("UIChange", (e) => {
                 console.warn("No such mesh in combobox:", value);
             }
             break;            
+        case "FloorChange":
+            // ensure the option exists before setting
+            const optionHExists = Array.from(floorHeightSelect.options).some(
+                opt => opt.value === value
+            );
+
+            if (optionHExists) {
+                floorHeightSelect.value = value;
+            } else {
+                console.warn("illegal height:", value);
+            }
+            break;    
         default:
             console.log("default",field);
             break;
@@ -261,15 +273,16 @@ export function setupEditorUI() {
     // set mesh combobox
     // const heightSelect = document.getElementById("heightSelect");
     // fill combo with keys from atlasMesh
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= Shared.WALLHEIGHTMAX; i++) {
         const option = document.createElement("option");
         option.value = i;
         option.textContent = i;  // what the user sees
         wallHeightSelect.appendChild(option);
     }
-    wallHeightSelect.value = "2";//default
+    // wallHeightSelect.value = "2";//default
+    wallHeightSelect.value = Shared.WALLHEIGHTDEFAULT.toString();
 
-    for (let i = 0; i <= 4; i++) {
+    for (let i = 0; i <= Shared.FLOORHEIGHTMAX; i++) {
         const option = document.createElement("option");
         option.value = i;
         option.textContent = i;  // what the user sees
