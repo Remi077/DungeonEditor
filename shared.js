@@ -40,7 +40,10 @@ export const cameraOffsetY = 1;
 // floor/wall height
 export const WALLHEIGHTDEFAULT = 2;
 export const WALLHEIGHTMAX = 4;
+export const WALLHEIGHTMIN = 1;
+export const FLOORHEIGHTDEFAULT = 0;
 export const FLOORHEIGHTMAX = 4;
+export const FLOORHEIGHTMIN = 0;
 export const CEILINGHEIGHTMAX = WALLHEIGHTMAX + FLOORHEIGHTMAX;
 export let wallHeight = WALLHEIGHTDEFAULT;
 export let floorHeight = 0;
