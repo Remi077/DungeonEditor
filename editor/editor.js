@@ -95,9 +95,9 @@ export let ActionToKeyMap = {
     moveCamLeft    : { key: 'KeyA' },
     moveCamFront   : { key: 'KeyW' },
     moveCamBack    : { key: 'KeyS' },
-    setAddPlaneMode: { key: 'Digit1', OnPress: true },
-    setAddLightMode: { key: 'Digit2', OnPress: true },
-    setAddMeshMode : { key: 'Digit3', OnPress: true },
+    // setAddPlaneMode: { key: 'Digit1', OnPress: true },
+    // setAddLightMode: { key: 'Digit2', OnPress: true },
+    // setAddMeshMode : { key: 'Digit3', OnPress: true },
     pause          : { key: 'KeyP', OnRelease: true },     //triggered once only at release
     prevMaterial   : { key: 'KeyQ', OnPress: true },
     nextMaterial   : { key: 'KeyE', OnPress: true },
@@ -106,8 +106,14 @@ export let ActionToKeyMap = {
     bakeLevel      : { key: 'KeyB', OnPress: true },
     loadLevel      : { key: 'KeyL', OnPress: true },
     startGame      : { key: 'KeyG', OnPress: true },
-    floorUp        : { key: 'PageUp', OnPress: true },
-    floorDown      : { key: 'PageDown', OnPress: true },
+    nextMode       : { key: 'PageUp', OnPress: true },
+    prevMode       : { key: 'PageDown', OnPress: true },
+
+    showXZ: { key: 'Digit1', OnPress: true },
+    showYZ: { key: 'Digit2', OnPress: true },
+    showXY: { key: 'Digit3', OnPress: true },
+    showW : { key: 'Digit4', OnPress: true },
+    showA : { key: 'Digit5', OnPress: true },
 };
 
 
@@ -124,6 +130,7 @@ export let ActionToKeyMap = {
 
 // grid and axes helpers
 let grid;
+// let gridtwo;
 let axes;
 
 // raycast floor
@@ -293,6 +300,7 @@ export function startEditorLoop() {
     markerxymaterial.visible     = true;
     markerremovematerial.visible = true;
     grid.visible                 = true;
+    // gridtwo.visible              = false;
     axes.visible                 = true;
     lightHelperGroup.visible     = true;
 }
@@ -312,6 +320,7 @@ export function stopEditorLoop() {
     markerxymaterial.visible     = false;
     markerremovematerial.visible = false;
     grid.visible                 = false;
+    // gridtwo.visible              = false;
     axes.visible                 = false;
     lightHelperGroup.visible     = false;
 }
@@ -346,7 +355,12 @@ function prevWall() {
 }
 
 function toggleWall(increment = 1) {
-    wallModeSelect = (((wallModeSelect + increment) % NUMMODES) + NUMMODES) % NUMMODES;
+    newWallModeSelect = (((wallModeSelect + increment) % NUMMODES) + NUMMODES) % NUMMODES;
+    setWallMode(newWallModeSelect);
+}
+
+function setWallMode(newWallModeSelect) {
+    wallModeSelect = newWallModeSelect;
     showMarkerXZ = false;
     showMarkerYZ = false;
     showMarkerXY = false;
@@ -371,6 +385,7 @@ function toggleWall(increment = 1) {
             break;
     }
 }
+
 
 
 function nextMaterial() {
@@ -592,7 +607,7 @@ export function onMouseClick(event) {
     if (!selectValid) return;
 
     if (currentAddMode == ADDLIGHTMODE) {
-        let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, selectY + 0.5, selectZ + 0.5));
+        let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, Shared.floorHeight + 0.5, selectZ + 0.5));
         placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
         return;
     }
@@ -661,7 +676,7 @@ function reinitMarker() {
     //RED
     markergroupxz.clear();
     markergroupxz.add(markerxz.clone());
-    markergroupxz.position.set(selectX, selectY+Shared.EPSILON, selectZ);
+    markergroupxz.position.set(selectX, Shared.floorHeight+Shared.EPSILON, selectZ);
 
     //GREEN
     markergroupyz.clear();
@@ -678,7 +693,7 @@ function reinitMarker() {
         t.position.y += y;
         markergroupyz.add(t);
     }
-    markergroupyz.position.set(selectX, selectY+Shared.EPSILON, selectZ);
+    markergroupyz.position.set(selectX, Shared.floorHeight+Shared.EPSILON, selectZ);
 
     //BLUE
     markergroupxy.clear();
@@ -688,7 +703,7 @@ function reinitMarker() {
         t.position.y += y;
         markergroupxy.add(t);
     }
-    markergroupxy.position.set(selectX, selectY+Shared.EPSILON, selectZ);
+    markergroupxy.position.set(selectX, Shared.floorHeight+Shared.EPSILON, selectZ);
 
     //reinit bbox
     boxselectModeendX = boxselectModestartX;
@@ -699,11 +714,43 @@ function reinitMarker() {
 // onMouseWheel
 /*---------------------------------*/
 export function onMouseWheel(event) {
+
+    //prevent browser zoom when ctrl+mouse wheel
+    if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+    }
+    
     if (!Shared.editorState.editorRunning) return;
-    if (event.deltaY < 0) {
-        nextWall();
-    } else {
-        prevWall();
+
+    if (event.ctrlKey){
+        if (event.deltaY < 0) {
+            nextFloorHeight();
+        } else {
+            prevFloorHeight();
+        }
+        
+        //update the UI
+        const cevent = new CustomEvent("UIChange", {
+            detail: { field: "FloorChange", value: Shared.floorHeight.toString() },
+            bubbles: true // optional, allows event to bubble up
+        });
+        document.dispatchEvent(cevent);
+
+    }else{
+        if (event.deltaY < 0) {
+            // nextWall();
+            nextWallHeight();
+        } else {
+            // prevWall();
+            prevWallHeight();
+        }
+
+        //update the UI
+        const cevent = new CustomEvent("UIChange", {
+            detail: { field: "WallChange", value: Shared.wallHeight.toString() },
+            bubbles: true // optional, allows event to bubble up
+        });
+        document.dispatchEvent(cevent);        
     }
 }
 
@@ -734,7 +781,6 @@ function pauseAndDebug(delta) {
 /*---------------------------------*/
 function movePlayer(delta) {
 
-    if (Actions.jump) jump();
     if (Actions.nextMaterial) nextMaterial();
     if (Actions.prevMaterial) prevMaterial();
     if (Actions.nextMesh) nextMesh();
@@ -742,40 +788,31 @@ function movePlayer(delta) {
     if (Actions.bakeLevel) bakeLevel();
     if (Actions.loadLevel) loadLevel();
     if (Actions.startGame) Shared.toggleGameMode();
-    if (Actions.setAddPlaneMode) {
+    if (Actions.nextMode) nextMode();
+    if (Actions.prevMode) prevMode();
+    // if (Actions.setAddPlaneMode) {
+    if (Actions.nextMode || Actions.prevMode) {
         const event = new CustomEvent("UIChange", {
-            detail: { field: "modeChange", value: ADDPLANEMODE },
+            detail: { field: "modeChange", value: currentAddMode },
             bubbles: true // optional, allows event to bubble up
         });
         document.dispatchEvent(event);
-        setAddMode(ADDPLANEMODE)
     };
-    if (Actions.setAddLightMode) {
-        const event = new CustomEvent("UIChange", {
-            detail: { field: "modeChange", value: ADDLIGHTMODE },
-            bubbles: true // optional, allows event to bubble up
-        });
-        document.dispatchEvent(event);
-        setAddMode(ADDLIGHTMODE);
-    };
-    if (Actions.setAddMeshMode) {
-        const event = new CustomEvent("UIChange", {
-            detail: { field: "modeChange", value: ADDMESHMODE },
-            bubbles: true // optional, allows event to bubble up
-        });
-        document.dispatchEvent(event);
-        setAddMode(ADDMESHMODE);
-    };
-    if (Actions.floorUp || Actions.floorDown) {
-        const inc = Actions.floorDown ? -1 : 1;
-        const newFloorHeight = Math.max(Math.min((Shared.floorHeight + inc),Shared.FLOORHEIGHTMAX),0);
-        const event = new CustomEvent("UIChange", {
-            detail: { field: "FloorChange", value: newFloorHeight.toString() },
-            bubbles: true // optional, allows event to bubble up
-        });
-        document.dispatchEvent(event);
-        setFloorHeight(newFloorHeight);
-    }
+    // if (Actions.floorUp || Actions.floorDown) {
+    //     const inc = Actions.floorDown ? -1 : 1;
+    //     const newFloorHeight = Math.max(Math.min((Shared.floorHeight + inc),Shared.FLOORHEIGHTMAX),0);
+    //     const event = new CustomEvent("UIChange", {
+    //         detail: { field: "FloorChange", value: newFloorHeight.toString() },
+    //         bubbles: true // optional, allows event to bubble up
+    //     });
+    //     document.dispatchEvent(event);
+    //     setFloorHeight(newFloorHeight);
+    // }
+    if (Actions.showXZ) setWallMode(MODEXZ);
+    if (Actions.showYZ) setWallMode(MODEYZ);
+    if (Actions.showXY) setWallMode(MODEXY);
+    if (Actions.showW) setWallMode(MODEW);
+    if (Actions.showA) setWallMode(MODEA);
 
 }
 
@@ -835,9 +872,9 @@ function editorLoop() {
 
                 if (!Shared.editorState.mouseIsDown) {
                     // slightly above floor to prevent z-fighting
-                    markergroupxz.position.set(selectX * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
-                    markergroupyz.position.set(selectX * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
-                    markergroupxy.position.set(selectX * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                    markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
                 } else {
 
                     //UPDATE SELECTION BBOX
@@ -845,9 +882,9 @@ function editorLoop() {
                     boxselectModeendZ = selectZ;
 
                     //UPDATE MARKER POSITION
-                    markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                    markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                    markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (selectY * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
 
                     //CLEAR MARKER MESHES
                     markergroupxz.clear();
@@ -1021,6 +1058,13 @@ function createScene() {
     grid = new THREE.GridHelper(Shared.gridSize, Shared.gridDivisions);
     grid.name = "GridHelper";
     Shared.scene.add(grid);
+    //second helper grid to show the floor current height
+    // gridtwo = new THREE.GridHelper(Shared.gridSize, Shared.gridDivisions,
+    //     new THREE.Color(0,1,0), new THREE.Color(0,1,0)
+    // );
+    // gridtwo.name = "GridTwoHelper";
+    // Shared.scene.add(gridtwo);
+    // gridtwo.visible=false;
     //helper gizmo
     axes = new THREE.AxesHelper(3); // size
     axes.name = "AxesHelper";
@@ -1129,6 +1173,14 @@ function clearGridMap(gridMapv) {
 /*---------------------------------*/
 // setAddMode
 /*---------------------------------*/
+function nextMode() { incMode(1);
+}
+function prevMode() { incMode(-1);
+}
+function incMode(inc){
+    const  newMode = (((currentAddMode + inc) % NUMADDMODES) + NUMADDMODES) % NUMADDMODES;
+    setAddMode(newMode);
+}
 export function setAddMode(mode) {
     console.log("setmode",mode);
     switch (mode) {
@@ -1233,17 +1285,17 @@ async function loadPlanesIntoScene(jsondata) {
     }
 
     const planetoinfo = {
-        XZ: { g: gridMapXZ, m: markerxz, t: tileXZGroup },
-        YZ: { g: gridMapYZ, m: markeryz, t: tileYZGroup },
-        XY: { g: gridMapXY, m: markerxy, t: tileXYGroup }
+        XZ: { g: gridMapXZ, m: markerxz, t: tileXZGroup, o:["y","z","x"] },
+        YZ: { g: gridMapYZ, m: markeryz, t: tileYZGroup, o:["x","z","y"] },
+        XY: { g: gridMapXY, m: markerxy, t: tileXYGroup, o:["z","y","x"] }
     };
 
     for (const key of ["XZ", "YZ", "XY"]) {
         const _hstr = jsondata[key];
         const _bb = bb["BB" + key];
-        const { g: _gridmap, m: _marker, t: _tilegroup } = planetoinfo[key];
+        const { g: _gridmap, m: _marker, t: _tilegroup, o: _order } = planetoinfo[key];
         if (!_hstr || !_bb) continue;
-        loadFlattenedMap(_hstr,_bb,_gridmap,_marker,_tilegroup,sceneGeometryDictArray);
+        loadFlattenedMap(_hstr,_bb,_gridmap,_marker,_tilegroup,sceneGeometryDictArray,_order);
     }
 
 
@@ -1455,41 +1507,57 @@ function hexToBB(hex) {
 /*---------------------------------*/
 // flattenGridMap
 /*---------------------------------*/
-export function flattenGridMap(gridMap, bbox) {
+function flattenGridMap(gridMap, bbox, order) {
     const { min, max } = bbox;
     const result = [];
 
-    if (gridMap.size === 0) return [];
+    if (gridMap.size === 0) return result;
 
-    // raster order is x,z,y (horizontal plane is XZ, up axis is Y)
-    for (let y = min.y; y <= max.y; y++) {
-        for (let z = min.z; z <= max.z; z++) {
-            for (let x = min.x; x <= max.x; x++) {
-                const key = Shared.getGridKey(x, y, z);
-                const cell = gridMap.get(key); // might be undefined if empty
+    const [a, b, c] = order; // axis order (e.g. ["x","z","y"])
+
+    for (let ai = min[a]; ai <= max[a]; ai++) {
+        for (let bi = min[b]; bi <= max[b]; bi++) {
+            for (let ci = min[c]; ci <= max[c]; ci++) {
+                const coords = { x: 0, y: 0, z: 0 };
+                coords[a] = ai;
+                coords[b] = bi;
+                coords[c] = ci;
+
+                const key = Shared.getGridKey(coords.x, coords.y, coords.z);
+                const cell = gridMap.get(key);
 
                 if (cell) {
-                    const entries = Array.from(cell.entries());
-                    const cellData = []; // start fresh per cell
-
-                    for (let i = 0; i < entries.length; i++) {
-                        const [meshName, mesh] = entries[i];
-                        const index = sceneGeometryDictID[mesh.geometry.userData.uvmeshid]; // 11-bit value
-
+                    const cellData = [];
+                    for (const [, mesh] of cell.entries()) {
+                        const index = sceneGeometryDictID[mesh.geometry.userData.uvmeshid];
                         cellData.push(index);
                     }
-
                     result.push(cellData);
                 } else {
-                    // empty cell → push null (or [] if you prefer)
-                    result.push(null);
+                    result.push(null); // empty cell
                 }
             }
         }
     }
 
-    return result; // array of arrays (or nulls)
+    return result;
 }
+
+/*---------------------------------*/
+// Specific orientations
+/*---------------------------------*/
+export function flattenXZGridMap(gridMap, bbox) {
+    return flattenGridMap(gridMap, bbox, ["y", "z", "x"]);
+}
+
+export function flattenYZGridMap(gridMap, bbox) {
+    return flattenGridMap(gridMap, bbox, ["x", "z", "y"]);
+}
+
+export function flattenXYGridMap(gridMap, bbox) {
+    return flattenGridMap(gridMap, bbox, ["z", "y", "x"]);
+}
+
 
 /*---------------------------------*/
 // compressFlattenedGrid
@@ -1583,9 +1651,9 @@ export function saveLevel() {
     const bbyz = calculateBoundingBox(gridMapYZ);
     const bbxy = calculateBoundingBox(gridMapXY);
 
-    const gridMapXZflattened = flattenGridMap(gridMapXZ,bbxz);
-    const gridMapYZflattened = flattenGridMap(gridMapYZ,bbyz);
-    const gridMapXYflattened = flattenGridMap(gridMapXY,bbxy);
+    const gridMapXZflattened = flattenXZGridMap(gridMapXZ,bbxz);
+    const gridMapYZflattened = flattenYZGridMap(gridMapYZ,bbyz);
+    const gridMapXYflattened = flattenXYGridMap(gridMapXY,bbxy);
 
     const mergedData = {};
     const gridMapXZcompressed = compressFlattenedGrid(gridMapXZflattened);
@@ -1714,63 +1782,110 @@ function generateGeometry(uvid,meshid) {
 /*---------------------------------*/
 // loadFlattenedMap
 /*---------------------------------*/
-function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
+// Helper: convert flat index to 3D coordinates
+// order is an array like ["x", "z", "y"] (raster order)
+function indexToCoords(flatIndex, sizeX, sizeY, sizeZ, order, bb) {
+    const sizes = { x: sizeX, y: sizeY, z: sizeZ };
+    const coords = { x: 0, y: 0, z: 0 };
+
+    // Compute strides
+    const stride0 = sizes[order[1]] * sizes[order[2]]; // how many to skip when order[0] increments
+    const stride1 = sizes[order[2]];                   // how many to skip when order[1] increments
+
+    // Flatten index expansion
+    const i0 = Math.floor(flatIndex / stride0);
+    const i1 = Math.floor((flatIndex % stride0) / stride1);
+    const i2 = flatIndex % stride1;
+
+    coords[order[0]] = i0 + bb.min[order[0]];
+    coords[order[1]] = i1 + bb.min[order[1]];
+    coords[order[2]] = i2 + bb.min[order[2]];
+
+    return coords;
+}
+
+/*---------------------------------*/
+// Generic loader
+/*---------------------------------*/
+function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, order = ["x", "z", "y"]) {
     const sizeX = bb.max.x - bb.min.x + 1;
     const sizeY = bb.max.y - bb.min.y + 1;
     const sizeZ = bb.max.z - bb.min.z + 1;
 
     let flatIndex = 0; // linear index across all tiles
-
     let geomArray = [];
     let p = 0;
-    while (p < hstr.length){
 
+    while (p < hstr.length) {
         const encoded = parseInt(hstr.slice(p, p + sceneGeometryHexWidth), 16);
         p += sceneGeometryHexWidth;
-        const last = (encoded >> sceneGeometryBitWidth) & 1;  // MSB (bit 12)
-        const geomIdx = encoded & (sceneGeometryMax - 1); 
 
-        if (geomIdx !== 0){
-            const geom    = sceneGeometryDictArray[geomIdx-1][1];//geomidx-1 because 0 is reserved to notile
+        const last = (encoded >> sceneGeometryBitWidth) & 1; // MSB (bit 12)
+        const geomIdx = encoded & (sceneGeometryMax - 1);
+
+        if (geomIdx !== 0) {
+            const geom = sceneGeometryDictArray[geomIdx - 1][1]; // geomidx-1 because 0 is reserved
             geomArray.push(geom);
             if (!last) continue;
         }
 
-        const count   = parseInt(hstr.slice(p, p + repeatCountHexWidth), 16);
-        p+=repeatCountHexWidth;
-        if (geomIdx === 0) {//0 = no tiles
-            flatIndex+=count;
+        const count = parseInt(hstr.slice(p, p + repeatCountHexWidth), 16);
+        p += repeatCountHexWidth;
+
+        if (geomIdx === 0) {
+            flatIndex += count; // skip empty cells
             continue;
         }
 
         for (let c = 0; c < count; c++, flatIndex++) {
-            // Compute 3D coordinates from flat index
-            // raster order is x,z,y
-            const y = Math.floor(flatIndex / (sizeX * sizeZ));
-            const z = Math.floor((flatIndex % (sizeX * sizeZ)) / sizeX);
-            const x = flatIndex % sizeX;
+            const coords = indexToCoords(flatIndex, sizeX, sizeY, sizeZ, order, bb);
 
             geomArray.forEach(geom => {
                 const mesh = new THREE.Mesh(geom, Shared.atlasMat);
-
                 mesh.position.set(
-                    (x + bb.min.x) * Shared.cellSize + marker.position.x,
-                    (y + bb.min.y) * Shared.cellSize + marker.position.y,
-                    (z + bb.min.z) * Shared.cellSize + marker.position.z
+                    coords.x * Shared.cellSize + marker.position.x,
+                    coords.y * Shared.cellSize + marker.position.y,
+                    coords.z * Shared.cellSize + marker.position.z
                 );
-
                 mesh.rotation.copy(marker.rotation);
-
                 placeTile(mesh, gridmap, tilegroup);
-            })
+            });
         }
         geomArray = [];
     }
 }
+/*---------------------------------*/
+// Specific orientations
+/*---------------------------------*/
+// export function loadXZFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
+//     return loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, ["y", "z", "x"]);
+// }
+
+// export function loadYZFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
+//     return loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, ["x", "z", "y"]);
+// }
+
+// export function loadXYFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
+//     return loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, ["z", "y", "x"]);
+// }
 
 /*---------------------------------*/
 // setWallHeight
 /*---------------------------------*/
+export function prevWallHeight(){
+    incWallHeight(-1);
+}
+export function nextWallHeight(){
+    incWallHeight(1);
+}
+export function incWallHeight(inc){
+    const min = Shared.WALLHEIGHTMIN;
+    const max = Shared.WALLHEIGHTMAX;
+
+    let newHeight = Shared.wallHeight + inc;
+    newHeight = Math.max(min, Math.min(max, newHeight));
+    setWallHeight(newHeight);
+}
 export function setWallHeight(height){
     Shared.setWallHeight(height);
     reinitMarker();
@@ -1780,9 +1895,32 @@ export function setWallHeight(height){
 /*---------------------------------*/
 // setFloorHeight
 /*---------------------------------*/
+export function prevFloorHeight(){
+    incFloorHeight(-1);
+}
+export function nextFloorHeight(){
+    incFloorHeight(1);
+}
+export function incFloorHeight(inc){
+    const min = Shared.FLOORHEIGHTMIN;
+    const max = Shared.FLOORHEIGHTMAX;
+
+    let newHeight = Shared.floorHeight + inc;
+    newHeight = Math.max(min, Math.min(max, newHeight));
+    setFloorHeight(newHeight);
+}
 export function setFloorHeight(height){
     Shared.setFloorHeight(height);
-    floor.position.y = height;
+    // floor.position.y = height;
     reinitMarker();
+
+    // if (height != Shared.FLOORHEIGHTDEFAULT){
+    //     // gridtwo.visible = true;
+    //     gridtwo.position.y = height;
+    // } else {
+    //     gridtwo.visible = false;
+    // }
+
+
     Shared.editorState.renderOneFrame = true;
 }
