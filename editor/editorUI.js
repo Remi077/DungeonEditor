@@ -77,7 +77,7 @@ document.addEventListener("pointerlockchange", () => {
         document.addEventListener("mousemove", Shared.onMouseMove, false);
         document.addEventListener("mousedown", Editor.onMouseClick, false);
         document.addEventListener("mouseup", Editor.onMouseUp, false);
-        document.addEventListener("wheel", Editor.onMouseWheel, false);
+        document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
 
     } else {
         // Shared.editorState.pause = true;
@@ -167,6 +167,18 @@ document.addEventListener("UIChange", (e) => {
                 console.warn("No such mesh in combobox:", value);
             }
             break;            
+        case "WallChange":
+            // ensure the option exists before setting
+            const optionWExists = Array.from(wallHeightSelect.options).some(
+                opt => opt.value === value
+            );
+
+            if (optionWExists) {
+                wallHeightSelect.value = value;
+            } else {
+                console.warn("illegal wall height:", value);
+            }
+            break;    
         case "FloorChange":
             // ensure the option exists before setting
             const optionHExists = Array.from(floorHeightSelect.options).some(
@@ -176,7 +188,7 @@ document.addEventListener("UIChange", (e) => {
             if (optionHExists) {
                 floorHeightSelect.value = value;
             } else {
-                console.warn("illegal height:", value);
+                console.warn("illegal floor height:", value);
             }
             break;    
         default:
