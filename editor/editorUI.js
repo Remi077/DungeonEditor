@@ -9,11 +9,12 @@ import * as GameHUD from '../game/gameHUD.js';
 /*-----------------------------------------------------*/
 // const AddBtn   = document.getElementById('AddBtn');
 // const AddLBtn  = document.getElementById('AddLBtn');
-const LoadBtn  = document.getElementById('LoadBtn');
-const SaveBtn  = document.getElementById('SaveBtn');
-const BakeBtn  = document.getElementById('BakeBtn');
-const ResetBtn = document.getElementById('ResetBtn');
-const StartBtn = document.getElementById('StartBtn');
+const LoadBtn      = document.getElementById('LoadBtn');
+const SaveBtn      = document.getElementById('SaveBtn');
+const BakeBtn      = document.getElementById('BakeBtn');
+const ResetBtn     = document.getElementById('ResetBtn');
+const StartBtn     = document.getElementById('StartBtn');
+const matSelectBtn = document.getElementById("matSelectBtn");
 
 /*-----------------------------------------------------*/
 // BUTTON LISTENERS
@@ -33,23 +34,33 @@ SaveBtn.addEventListener('click', () => { Editor.saveLevel(); });
 BakeBtn.addEventListener('click', () => { Editor.bakeLevel(); });
 ResetBtn.addEventListener('click', () => { Editor.resetLevel(); });
 StartBtn.addEventListener('click', () => { Shared.toggleGameMode(); });
+matSelectBtn.addEventListener('click', () => { openPopup(true); });
 
 /*-----------------------------------------------------*/
 // COMBOBOX
 /*-----------------------------------------------------*/
-const matSelect = document.getElementById("matSelect");
+// const matSelect = document.getElementById("matSelect");
 const meshSelect = document.getElementById("meshSelect");
 const wallHeightSelect = document.getElementById("wallHeightSelect");
 const floorHeightSelect = document.getElementById("floorHeightSelect");
 
 /*-----------------------------------------------------*/
+// RADIOS
+/*-----------------------------------------------------*/
+const radios = document.querySelectorAll('input[name="wallOption"]');
+
+/*-----------------------------------------------------*/
 // COMBOBOX LISTENER
 /*-----------------------------------------------------*/
-matSelect.addEventListener("change", (event) => {
-    Editor.setCurrentUVIndex(event.target.selectedIndex);
-    Editor.setMesh(event.target.selectedIndex,Editor.getCurrentMeshIndex());
-    console.log("event.target.selectedIndex",event.target.selectedIndex);
-});
+// matSelect.addEventListener("click", e => {
+//     // e.clientX/Y = mouse position relative to viewport
+//     openPopup(e.clientX, e.clientY);
+// });
+// matSelect.addEventListener("change", (event) => {
+//     Editor.setCurrentUVIndex(event.target.selectedIndex);
+//     Editor.setMesh(event.target.selectedIndex,Editor.getCurrentMeshIndex());
+//     console.log("event.target.selectedIndex",event.target.selectedIndex);
+// });
 meshSelect.addEventListener("change", (event) => {
     Editor.setCurrentMeshIndex(event.target.selectedIndex);
     Editor.setMesh(Editor.getCurrentUVIndex(), event.target.selectedIndex);
@@ -66,6 +77,9 @@ floorHeightSelect.addEventListener("change", (event) => {
 /*-----------------------------------------------------*/
 // DOCUMENT/Shared.canvas EVENT LISTENERS
 /*-----------------------------------------------------*/
+//prevent right click context menu everywhere in document
+document.addEventListener("contextmenu", (e) => e.preventDefault()); // prevent browser menu
+
 // Shared.editorState.pause = true; //start paused
 document.addEventListener("pointerlockchange", () => {
     if (document.pointerLockElement === Shared.canvas) {
@@ -75,10 +89,10 @@ document.addEventListener("pointerlockchange", () => {
         document.getElementById('crosshair').style.display = 'block';
         document.getElementById('pointer-lock-hint').style.display = 'block';
         document.addEventListener("mousemove", Shared.onMouseMove, false);
-        document.addEventListener("mousedown", Editor.onMouseClick, false);
-        document.addEventListener("mouseup", Editor.onMouseUp, false);
+        document.addEventListener("mousedown", onMouseClick, false);
+        document.addEventListener("mouseup", onMouseUp, false);
         document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
-
+        closePopup();
     } else {
         // Shared.editorState.pause = true;
         Shared.setPause(true);
@@ -86,11 +100,26 @@ document.addEventListener("pointerlockchange", () => {
         document.getElementById('crosshair').style.display = 'none';
         document.getElementById('pointer-lock-hint').style.display = 'none';
         document.removeEventListener("mousemove", Shared.onMouseMove, false);
-        document.removeEventListener("mousedown", Editor.onMouseClick, false);
-        document.removeEventListener("mouseup", Editor.onMouseUp, false);
+        document.removeEventListener("mousedown", onMouseClick, false);
+        document.removeEventListener("mouseup", onMouseUp, false);
         document.removeEventListener("wheel", Editor.onMouseWheel, false);
     }
 });
+
+function onMouseUp(event){
+    Editor.onMouseUp(event);
+    //right click
+    if (event.button == 2) {
+        openPopup();
+        document.exitPointerLock();
+    }
+}
+function onMouseClick(event){
+    Editor.onMouseClick(event);
+    // if (event.button == 2) {
+    //     closePopup();
+    // }
+}
 
 /*-----------------------------------------------------*/
 // GAMEPLAY GLOBAL VARIABLES
@@ -106,6 +135,10 @@ Shared.canvas.addEventListener("click", () => {
 // WINDOW RESIZE
 /*-----------------------------------------------------*/
 window.addEventListener('resize', () => {
+    resizeRenderer();
+});
+
+function resizeRenderer() {
     // Resize the 3D Shared.canvas
     Shared.renderer.setSize(Shared.container.clientWidth, Shared.container.clientHeight);
     Shared.camera.aspect = Shared.container.clientWidth / Shared.container.clientHeight;
@@ -114,7 +147,7 @@ window.addEventListener('resize', () => {
     // Resize the HUD canvas
     GameHUD.hudCanvas.width = Shared.container.clientWidth;
     GameHUD.hudCanvas.height = Shared.container.clientHeight;
-});
+}
 
 /*-----------------------------------------------------*/
 // KEYBOARD INPUTS
@@ -132,6 +165,26 @@ document.addEventListener('keyup', (event) => {
 document.addEventListener("UIChange", (e) => {
     const { field, value } = e.detail;
     switch (field) {
+        case "gameModeChange":
+            switch (value) {
+                case Shared.MODEMENU:
+                    //hide the uipanel in game mode and resize renderer
+                    Shared.uipanel.classList.add("hidden");
+                    break;      
+                case Shared.MODEEDITOR:
+                    //re-add the uipanel in editor mode and resize renderer
+                    Shared.uipanel.classList.remove("hidden");
+                    break;
+                case Shared.MODEGAME:
+                    //hide the uipanel in game mode and resize renderer
+                    Shared.uipanel.classList.add("hidden");
+                    break;                    
+                default:
+                    console.warn("game mode unsupported:", value);
+                    break;
+            }
+            resizeRenderer();
+            break;
         case "modeChange":
             document.querySelectorAll("#ui-panel .tab-header").forEach(
                 h => {
@@ -144,17 +197,36 @@ document.addEventListener("UIChange", (e) => {
             );
             break;
         case "MaterialChange":
-            // ensure the option exists before setting
-            const optionExists = Array.from(matSelect.options).some(
-                opt => opt.value === value
+            const matPreviewCanvas = document.getElementById("matPreviewCanvas");
+            const ctx = matPreviewCanvas.getContext("2d");
+            const atlasTexture = Shared.atlasMat.map;
+            const atlasImage = atlasTexture.image;
+            // clear
+            ctx.clearRect(0, 0, matPreviewCanvas.width, matPreviewCanvas.height);
+            
+            let size = Shared.atlasDict.SIZE;
+            let numy = Shared.atlasDict.NUMY-1;
+            const subImageX = (Shared.atlasUVsArray[value][1]?.x || 0) * size;
+            const subImageY = (numy-(Shared.atlasUVsArray[value][1]?.y || 0)) * size;
+            // draw the selected subimage from the atlas into the preview canvas
+            ctx.drawImage(
+                atlasImage,
+                subImageX, subImageY, size, size, // source
+                0, 0, matPreviewCanvas.width, matPreviewCanvas.height // destination
             );
-
-            if (optionExists) {
-                matSelect.value = value;
-            } else {
-                console.warn("No such material in combobox:", value);
-            }
             break;
+            // case "MaterialChange":
+        //     // ensure the option exists before setting
+        //     const optionExists = Array.from(matSelect.options).some(
+        //         opt => opt.value === value
+        //     );
+
+        //     if (optionExists) {
+        //         matSelect.value = value;
+        //     } else {
+        //         console.warn("No such material in combobox:", value);
+        //     }
+        //     break;
         case "MeshChange":
             // ensure the option exists before setting
             const optionMeshExists = Array.from(meshSelect.options).some(
@@ -191,6 +263,13 @@ document.addEventListener("UIChange", (e) => {
                 console.warn("illegal floor height:", value);
             }
             break;    
+        case "WallModeChange":
+            const newValue = e.detail.value; // the value you sent
+            const radios = document.querySelectorAll('input[name="wallOption"]');
+            radios.forEach(radio => {
+                radio.checked = (parseInt(radio.value, 10) === parseInt(newValue, 10));
+            });
+            break;
         default:
             console.log("default",field);
             break;
@@ -260,12 +339,13 @@ export function setupEditorUI() {
     // set material combobox
     // const matSelect = document.getElementById("matSelect");
     // fill combo with keys from matDict
-    Object.keys(Shared.atlasUVs).forEach(key => {
-        const option = document.createElement("option");
-        option.value = key;
-        option.textContent = key;  // visible label
-        matSelect.appendChild(option);
-    });
+
+    // Object.keys(Shared.atlasUVs).forEach(key => {
+    //     const option = document.createElement("option");
+    //     option.value = key;
+    //     option.textContent = key;  // visible label
+    //     matSelect.appendChild(option);
+    // });
 
     // set default starting value
     // if (matSelect.options.length > 0) {
@@ -301,5 +381,114 @@ export function setupEditorUI() {
         floorHeightSelect.appendChild(option);
     }
 
+    //setup the popup atlas canvas
+    setupPopup();
 }
 
+/*-----------------------------------------------------*/
+// POPUP
+/*-----------------------------------------------------*/
+
+function openPopup(tr = false) {
+    Shared.popup.style.display = "block";
+
+    // if (x !== null && y !== null) {
+    if (tr) {
+        // top-right corner
+        popup.style.top = "0px";
+        popup.style.right = "0px";
+        popup.style.left = "auto";
+        popup.style.bottom = "auto";
+        popup.style.transform = "none";
+    } else {
+        // center of screen
+        popup.style.left = "50%";
+        popup.style.top = "50%";
+        popup.style.right = "auto";
+        popup.style.bottom = "auto";
+        popup.style.transform = "translate(-50%, -50%)";
+    }
+}
+export function closePopup(){
+    Shared.popup.style.display = "none"; // toggle off if already open
+}
+
+function setupPopup() {
+    const atlasCanvas = document.getElementById("atlasCanvas");
+    const ctx = atlasCanvas.getContext("2d");
+
+    const texture = Shared.atlasMat.map;
+    const atlasImage = texture.image;  // this is the real <img> or <canvas>
+
+    if (!atlasImage) {
+        console.warn("Atlas texture has no image yet");
+        return;
+    }
+
+    atlasCanvas.width = atlasImage.width;
+    atlasCanvas.height = atlasImage.height;
+
+    ctx.drawImage(atlasImage, 0, 0);
+
+
+    const cellSize = Shared.atlasDict.SIZE; // adjust to your atlas tile size
+
+    atlasCanvas.addEventListener("click", (e) => {
+        const rect = atlasCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const col = Math.floor(x / cellSize);
+        const row = Math.floor(y / cellSize);
+        const index = row * (atlasCanvas.width / cellSize) + col;
+
+        // console.log("Clicked subimage:", { row, col, index });
+
+        Editor.setMaterial(index);
+
+        closePopup();
+        Shared.canvas.requestPointerLock()
+    });
+
+    atlasCanvas.addEventListener("mousemove", (e) => {
+        const rect = atlasCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const col = Math.floor(x / cellSize);
+        const row = Math.floor(y / cellSize);
+
+        // redraw atlas
+        ctx.clearRect(0, 0, atlasCanvas.width, atlasCanvas.height);
+        ctx.drawImage(atlasImage, 0, 0);
+
+        // highlight hovered cell
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+
+    });
+
+}
+
+// const popupbtn = document.getElementById('Item 1');
+// popupbtn.addEventListener('click', () => {
+//     console.log("popup");
+//     closePopup();
+//     Shared.canvas.requestPointerLock()
+// });
+
+/*-----------------------------------------------------*/
+// RADIOS EVENT LISTENERS
+/*-----------------------------------------------------*/
+radios.forEach(radio => {
+  radio.addEventListener('change', (event) => {
+    if (event.target.checked) {
+        Editor.setWallMode(parseInt(event.target.value, 10));
+        Shared.editorState.renderOneFrame = true;
+    //   console.log("Radio group name:", event.target.name);  // 👉 "wallOption"
+    //   console.log("Selected option id:", event.target.id);  // 👉 "ceiling", "leftwall" etc
+    //   console.log("Selected option value:", event.target.value); // 👉 "ceiling", "leftwall" etc
+    }
+  });
+});
