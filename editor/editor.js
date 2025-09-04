@@ -206,6 +206,7 @@ export function setupEditor() {
 
     //start in add plane mode
     setAddMode(ADDPLANEMODE);
+    setWallMode(MODEA);
 
     /*-----------------------------*/
     // MARKERS SETUP
@@ -303,6 +304,7 @@ export function startEditorLoop() {
     // gridtwo.visible              = false;
     axes.visible                 = true;
     lightHelperGroup.visible     = true;
+
 }
 
 /*---------------------------------*/
@@ -323,6 +325,7 @@ export function stopEditorLoop() {
     // gridtwo.visible              = false;
     axes.visible                 = false;
     lightHelperGroup.visible     = false;
+
 }
 
 /*---------------------------------*/
@@ -359,7 +362,7 @@ function toggleWall(increment = 1) {
     setWallMode(newWallModeSelect);
 }
 
-function setWallMode(newWallModeSelect) {
+export function setWallMode(newWallModeSelect) {
     wallModeSelect = newWallModeSelect;
     showMarkerXZ = false;
     showMarkerYZ = false;
@@ -384,6 +387,13 @@ function setWallMode(newWallModeSelect) {
             showMarkerXY = true;
             break;
     }
+    //update UI
+    const event = new CustomEvent("UIChange", {
+        detail: { field: "WallModeChange", value: newWallModeSelect },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(event);
+
 }
 
 
@@ -401,12 +411,21 @@ export function getCurrentUVIndex(){return currentUVIndex;}
 
 function toggleMaterial(increment) {
     let l = Shared.atlasUVsArray.length;
-    currentUVIndex = (((currentUVIndex + increment) % l) + l) % l;
-    let currentName = Shared.atlasUVsArray[currentUVIndex][0];
-    setMesh(currentUVIndex,currentMeshIndex);
+    let newUvIndex = (((currentUVIndex + increment) % l) + l) % l;
+    setMaterial(newUvIndex);
+}
+
+export function setMaterial(uvIndex){
+    currentUVIndex = uvIndex;
+    let currentName = Shared.atlasUVsArray[uvIndex][0];
+    setMesh(uvIndex,currentMeshIndex);
     //notify the UI back to update the selected combobox
+    // const event = new CustomEvent("UIChange", {
+    //     detail: { field: "MaterialChange", value: currentName },
+    //     bubbles: true // optional, allows event to bubble up
+    // });
     const event = new CustomEvent("UIChange", {
-        detail: { field: "MaterialChange", value: currentName },
+        detail: { field: "MaterialChange", value: uvIndex },
         bubbles: true // optional, allows event to bubble up
     });
     document.dispatchEvent(event);
@@ -604,29 +623,33 @@ export function onMouseClick(event) {
 
     if (!Shared.editorState.editorRunning) return;
 
-    if (!selectValid) return;
+    if (event.button == 0)  {
+        if (!selectValid) return;
 
-    if (currentAddMode == ADDLIGHTMODE) {
-        let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, Shared.floorHeight + 0.5, selectZ + 0.5));
-        placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
-        return;
+        if (currentAddMode == ADDLIGHTMODE) {
+            let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, Shared.floorHeight + 0.5, selectZ + 0.5));
+            placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
+            return;
+        }
+
+        Shared.editorState.hasClicked = true;
+
+        markergroupxz.visible = false;
+        markergroupxy.visible = false;
+        markergroupyz.visible = false;
+
+        // if (event.shiftKey) { // console.log("Shift + Click detected");
+        boxselectModestartX = selectX;
+        boxselectModestartZ = selectZ;
+        boxselectModeendX = selectX;
+        boxselectModeendZ = selectZ;
+        Shared.editorState.mouseIsDown = true;
     }
 
-    Shared.editorState.hasClicked = true;
-
-    markergroupxz.visible = false;
-    markergroupxy.visible = false;
-    markergroupyz.visible = false;
-
-    // if (event.shiftKey) { // console.log("Shift + Click detected");
-    boxselectModestartX = selectX;
-    boxselectModestartZ = selectZ;
-    boxselectModeendX = selectX;
-    boxselectModeendZ = selectZ;
-    Shared.editorState.mouseIsDown = true;
-
-    if (event.button == 2)
-        setEraser(true);//eraser on right click
+    //right click
+    if (event.button == 2){
+        // setEraser(true);//eraser on right click
+    }
 
 }
 
@@ -636,36 +659,39 @@ export function onMouseClick(event) {
 export function onMouseUp(event) {
 
     if (!Shared.editorState.editorRunning) return;
+    
+    if (event.button == 0){
+        Shared.editorState.mouseIsDown = false;
 
-    Shared.editorState.mouseIsDown = false;
+        if (currentAddMode != ADDPLANEMODE) {
+            return;
+        }
 
-    if (currentAddMode != ADDPLANEMODE) {
-        return;
+        if (!selectValid) {
+            reinitMarker();
+            return;
+        }
+
+        //find material
+        let materialToApply = Shared.atlasMat;
+        if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
+        if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
+        if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
+
+        boxselectModeendX = boxselectModestartX;
+        boxselectModeendZ = boxselectModestartZ;
     }
-
-    if (!selectValid) {
-        reinitMarker();
-        return;
-    }
-
-    //find material
-    let materialToApply = Shared.atlasMat;
-    if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
-    if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
-    if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
-
-    boxselectModeendX = boxselectModestartX;
-    boxselectModeendZ = boxselectModestartZ;
 
     //update tilecount
     // updateTileCount();
 
-    if (event.button == 2)
-        setEraser(false);
+    //right click
+    if (event.button == 2){
+        // setEraser(false);
+    }
 
     //reinitialize marker
     reinitMarker();
-
 }
 
 /*---------------------------------*/
