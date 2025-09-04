@@ -5,6 +5,7 @@
 import * as Shared from './shared.js';
 import * as Editor from './editor/editor.js';
 import * as EditorUI from './editor/editorUI.js';
+import * as MenuUI from './menu/menuUI.js';
 import * as Game from './game/game.js';
 
 /*-----------------------------------------------------*/
@@ -55,6 +56,8 @@ main
  │    ├──> editor
  │    ├──> shared
  │    └──> gameHUD
+ ├── menuUI ─────────> shared
+ │ 
  └── shared ─────────> LoadResources
 
 */
@@ -63,6 +66,7 @@ main
 //main->game
 //main->shared
 //main->editorUI
+//main->menuUI
 
 //editorUI->editor
 //editorUI->shared
@@ -71,6 +75,8 @@ main
 //editor->stats
 //editor->shared
 //editor->gameHUD
+
+//menuUI->shared
 
 //game->stats
 //game->shared
@@ -109,6 +115,7 @@ async function setupAndStart() {
         
         // Start editor loop
         Shared.setMode(Shared.MODEEDITOR);
+        // Shared.setMode(Shared.MODEMENU);
 
     } catch (error) {
         console.error("Error: ", error);
