@@ -35,7 +35,7 @@ document.addEventListener("UIChange", (e) => {
             }
             break;
         default:
-            console.log("default",field);
+            // console.log("default",field);
             break;
     }
 });
