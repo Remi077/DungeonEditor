@@ -49,8 +49,9 @@ export let wallHeight = WALLHEIGHTDEFAULT;
 export let floorHeight = 0;
 
 // modes
-export const MODEEDITOR = 0;
-export const MODEGAME = 1;
+export const MODEMENU = 0;
+export const MODEEDITOR = 1;
+export const MODEGAME = 2;
 
 // editor variables
 export const editorState = {
@@ -86,6 +87,8 @@ export const uvInfo = {};
 // Dynamically create a canvas element
 export const canvas    = document.getElementById('three-canvas');
 export const container = document.getElementById('canvas-container');
+export const uipanel   = document.getElementById('ui-panel');
+export const popup     = document.getElementById("popup");
 
 // Scene, Camera, Renderer
 export const scene    = new THREE.Scene();
@@ -202,6 +205,8 @@ export function toggleGameMode() {
 /*---------------------------------*/
 export function setMode(mode) {
     switch (mode) {
+        case MODEMENU:
+            break;
         case MODEGAME:
             StartBtn.textContent = "Stop Game";
             stopEditorLoop();
@@ -222,6 +227,13 @@ export function setMode(mode) {
             editorState.renderOneFrame = true;
             break;
     }
+
+    //update the UI
+    const cevent = new CustomEvent("UIChange", {
+        detail: { field: "gameModeChange", value: mode },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(cevent);
 }
 
 /*---------------------------------*/
