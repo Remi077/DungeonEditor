@@ -44,6 +44,11 @@
             /* 👈 Prevents content overflow from breaking flex */
         }
 
+        /* #canvas-container.fullscreen {
+            flex: 1 1 100%;
+            width: 100% !important;
+        } */
+
         #crosshair {
             position: absolute;
             top: 50%;
@@ -68,6 +73,19 @@
             border-radius: 4px;
             z-index: 100;
             display: none;
+        }
+
+        #popup {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            background: #222;
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: auto;
+            z-index: 1000;
         }
 
         canvas {
@@ -109,7 +127,7 @@
 
 
     
-
+        /* sidebar in edit mode */
         #ui-panel {
             width: 300px;
             min-width: 250px;
@@ -119,6 +137,11 @@
             flex-direction: column;
             border-left: 1px solid #333;
             box-sizing: border-box;
+        }
+
+        /* hide the sidebar in gamemode */
+        .hidden {
+            display: none !important;
         }
 
         .tab {
@@ -201,6 +224,29 @@
 
 <body>
 
+    <!-- Menu overlay -->
+    <div id="menu" style="
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.85);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: sans-serif;
+        z-index: 1000;
+    ">
+        <h1 style="font-size: 4em; margin-bottom: 50px;">My 3D Game</h1>
+        <button id="menu-start" style="margin:10px; padding:15px 40px; font-size: 1.5em;">Start Game</button>
+        <button id="menu-load" style="margin:10px; padding:15px 40px; font-size: 1.5em;">Load</button>
+        <button id="menu-editor" style="margin:10px; padding:15px 40px; font-size: 1.5em;">Editor</button>
+    </div>
+
+
+    <!-- Main container for the canvas and UI panel -->
     <div id="main-container">
         <!-- Left: 3D canvas -->
         <div id="canvas-container">
@@ -208,9 +254,15 @@
             <div id="crosshair">+</div>
             <div id="pointer-lock-hint">Press ESC to release the mouse</div>
             <canvas id="hud-canvas"></canvas>
+
+            <!-- POPUP -->
+            <div id="popup">
+                <canvas id="atlasCanvas"></canvas>                
+                <!-- <div><button id="Item 1">Item 1</button></div> -->
+                <!-- <div>Item 2</div> -->
+                <!-- <div>Item 3</div> -->
+            </div>            
         </div>
-
-
 
         <div id="ui-panel">
             <div class="tab-header">Game controls</div>
@@ -221,7 +273,10 @@
                     <!-- <select id="matSelect"></select> TODO: this is a simple combobox for the moment -->
                     <div class="form-row">
                         <label for="matSelect">Material:</label>
-                        <select id="matSelect"></select>
+                        <button id="matSelectBtn">
+                            <canvas id="matPreviewCanvas" width="64" height="64"></canvas>
+                        </button>                        
+                        <!-- <select id="matSelect"></select> -->
                     </div>
                     <div class="form-row">
                         <label for="meshSelect">Mesh:</label>
@@ -236,10 +291,11 @@
                         <select id="floorHeightSelect"></select>
                     </div>
                     <!-- Checkboxes -->
-                    <label><input type="checkbox" id="ceiling"> ceiling</label>
-                    <label><input type="checkbox" id="leftwall" checked> leftwall</label>
-                    <label><input type="checkbox" id="rightwall" checked> rightwall</label>
-                    <label><input type="checkbox" id="floor" checked> floor</label>
+                    <label><input type="radio" name="wallOption" value="0"> floor</label>
+                    <label><input type="radio" name="wallOption" value="1"> leftwall</label>
+                    <label><input type="radio" name="wallOption" value="2"> rightwall</label>
+                    <label><input type="radio" name="wallOption" value="3"> walls</label>
+                    <label><input type="radio" name="wallOption" value="4" checked> All</label>
                 </div>
             </div>
 
@@ -289,43 +345,9 @@
             <!-- </div> -->
         </div>
 
-<!-- 
-        <div id="ui-panel">
-            <h2>Game UI</h2>
-            <button id="AddBtn">Add Planes (1)</button>
-            <button id="AddLBtn">Add Lights (2)</button> -->
-            <!-- <button id="LoadBtn">Load Planes (L)</button> -->
-<!-- 
-            <button id="LoadBtn" style="position: relative; overflow: hidden;">
-                <span id="LoadBtnText" style="position: relative; z-index: 2;">Load Planes (L)</span>
-                <div id="LoadBtnProgress" style="
-                position: absolute;
-                top: 0; left: 0; bottom: 0;
-                background-color: #4caf50;
-                width: 0%;
-                z-index: 1;
-                transition: width 0.3s ease;
-                opacity: 0.5;
-            "></div>
-            </button>
 
-            <button id="SaveBtn">Save Planes (T)</button>
-            <button id="BakeBtn">Bake Planes (B)</button>
-            <button id="ResetBtn">Reset</button>
-            <button id="StartBtn">Start Game (G)</button> -->
-            <!-- Add more UI elements as needed -->
-            <!-- <div id="text-stats" style="font-family: monospace; font-size: 12px; margin-top: 10px; line-height: 1.5em;">
-                <div>FPS: <span id="fps">0</span></div>
-                <div>Meshes: <span id="meshCount">0</span></div>
-                <div>Visible Meshes: <span id="visibleMeshCount">0</span></div>
-                <div>Lights: <span id="lightCount">0</span></div>
-                <div>Materials: <span id="materialCount">0</span></div>
-                <div>Geometries: <span id="geometryCount">0</span></div>
-                <div>Textures: <span id="textureCount">0</span></div>
-                <div>Draw Calls: <span id="drawCalls">0</span></div>
-            </div>
-        </div>
-    </div> -->
+
+
 
     <div id="revision-info">Version: 0.1</div>
 
