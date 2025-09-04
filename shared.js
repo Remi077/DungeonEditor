@@ -117,7 +117,7 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = true;
+    let online = false;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
@@ -420,7 +420,7 @@ export function onMouseMove(event) {
 // setWallHeight
 /*---------------------------------*/
 export function setWallHeight(height){
-    console.log("wall height is",height);
+    // console.log("wall height is",height);
     wallHeight = height;
 }
 
@@ -428,6 +428,6 @@ export function setWallHeight(height){
 // setFloorHeight
 /*---------------------------------*/
 export function setFloorHeight(height){
-    console.log("floor height is",height);
+    // console.log("floor height is",height);
     floorHeight = height;
 }
