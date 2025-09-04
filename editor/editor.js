@@ -101,7 +101,9 @@ export let ActionToKeyMap = {
     pause          : { key: 'KeyP', OnRelease: true },     //triggered once only at release
     prevMaterial   : { key: 'KeyQ', OnPress: true },
     nextMaterial   : { key: 'KeyE', OnPress: true },
-    nextMesh       : { key: 'Tab', OnPress: true },
+    toggleEraser   : { key: 'KeyR', OnPress: true }, 
+    nextMesh       : { key: 'KeyC', OnPress: true },
+    prevMesh       : { key: 'KeyZ', OnPress: true },
     saveLevel      : { key: 'KeyT', OnPress: true },
     bakeLevel      : { key: 'KeyB', OnPress: true },
     loadLevel      : { key: 'KeyL', OnPress: true },
@@ -231,10 +233,13 @@ export function setupEditor() {
         });
     markeryzmaterial = markerxzmaterial.clone();
     markerxymaterial = markerxzmaterial.clone();
-    markerremovematerial = new THREE.MeshBasicMaterial(
+    markerremovematerial = Shared.atlasMat.clone();
+    // markerremovematerial = new THREE.MeshBasicMaterial(
+    Object.assign(markerremovematerial,
         {
             side: THREE.DoubleSide,
             transparent: true,
+            // transparent: false,
             opacity: 0.5
         });
 
@@ -331,17 +336,28 @@ export function stopEditorLoop() {
 /*---------------------------------*/
 // setEraser
 /*---------------------------------*/
+function toggleEraser() {
+    setEraser(!eraserMode);
+}
+
+
 function setEraser(enabled) {
+    console.log("set eraserMode to ",enabled);
     eraserMode = enabled;
 
     if (eraserMode) {
-        markerxz.material = markerremovematerial;
-        markeryz.material = markerremovematerial;
-        markerxy.material = markerremovematerial;
+        markergroupxz.visible = false;
+        markergroupyz.visible = false;
+        markergroupxy.visible = false;        
     } else {
-        markerxz.material = markerxzmaterial;
-        markeryz.material = markeryzmaterial;
-        markerxy.material = markerxymaterial;
+        raycastMeshXZArray = [];
+        raycastMeshYZArray = [];
+        raycastMeshXYArray = [];
+        if (selectObj) selectObj.material = Shared.atlasMat;
+        selectObj=null;
+        markergroupxz.visible = showMarkerXZ;
+        markergroupyz.visible = showMarkerYZ;
+        markergroupxy.visible = showMarkerXY;
     }
     reinitMarker();
 }
@@ -434,9 +450,8 @@ export function setMaterial(uvIndex){
 /*---------------------------------*/
 // setMesh
 /*---------------------------------*/
-function nextMesh(){
-    toggleMesh(1);
-}
+function nextMesh() { toggleMesh(1); }
+function prevMesh() { toggleMesh(-1); }
 
 export function setCurrentMeshIndex(i){currentMeshIndex = i;}
 export function getCurrentMeshIndex(){return currentMeshIndex;}
@@ -480,7 +495,9 @@ function placeGroup(group, targetgroup, grid, material) {
         //so the current inner invisible "todelete" walls are tested against these to cull them 
         // in placeTile function
         //then we remove them in following lines
-        if (eraserMode || child.userData?.todelete) {
+        if (
+            // eraserMode || 
+            child.userData?.todelete) {
             group.remove(child);
         } else {
             child.position.y -= Shared.EPSILON;//remove Shared.EPSILON vertical offset
@@ -516,7 +533,7 @@ function placeLight(lightv, lighthelperv) {
     }
 
     //if eraser mode we finished our work here
-    if (eraserMode) return;
+    // if (eraserMode) return;
 
     lightGroup.add(lightv);
     lightHelperGroup.add(lighthelperv);
@@ -540,17 +557,17 @@ function placeTile(tile, gridmap, group) {
 
     if (gridmap.has(key)) {
         const gridtiles = gridmap.get(key);
-        if (eraserMode) {
-            // Remove all tiles at this grid cell
-            for (const tiletoremove of gridtiles.values()) {
-                if (tiletoremove) {
-                    group.remove(tiletoremove);
-                    tiletoremove.geometry.dispose();
-                    tiletoremove.material.dispose();
-                }
-            }
-            gridtiles.clear();
-        } else {
+        // if (eraserMode) {
+        //     // Remove all tiles at this grid cell
+        //     for (const tiletoremove of gridtiles.values()) {
+        //         if (tiletoremove) {
+        //             group.remove(tiletoremove);
+        //             tiletoremove.geometry.dispose();
+        //             tiletoremove.material.dispose();
+        //         }
+        //     }
+        //     gridtiles.clear();
+        // } else {
             if (gridtiles.has(meshname)) {
                 const tiletoremove = gridtiles.get(meshname);
                 if (tiletoremove) {
@@ -560,14 +577,15 @@ function placeTile(tile, gridmap, group) {
                 }
                 gridtiles.delete(meshname);
             }
-        }
+        // }
         if (gridtiles.size === 0)
             gridmap.delete(key);
     }
 
     //if eraser mode we finished our work here
-    if (eraserMode
-        || tile.userData?.todelete
+    if (
+        eraserMode ||
+        tile.userData?.todelete
     ) return;
 
     //otherwise add tile now
@@ -623,33 +641,38 @@ export function onMouseClick(event) {
 
     if (!Shared.editorState.editorRunning) return;
 
-    if (event.button == 0)  {
-        if (!selectValid) return;
+    if (event.button == 0) {
 
-        if (currentAddMode == ADDLIGHTMODE) {
-            let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, Shared.floorHeight + 0.5, selectZ + 0.5));
-            placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
-            return;
+        if (eraserMode) { 
+            //TOCOMPLETE
+        } else {
+            if (!selectValid) return;
+
+            if (currentAddMode == ADDLIGHTMODE) {
+                let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, Shared.floorHeight + 0.5, selectZ + 0.5));
+                placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
+                return;
+            }
+
+            Shared.editorState.hasClicked = true;
+
+            markergroupxz.visible = false;
+            markergroupxy.visible = false;
+            markergroupyz.visible = false;
+
+            // if (event.shiftKey) { // console.log("Shift + Click detected");
+            boxselectModestartX = selectX;
+            boxselectModestartZ = selectZ;
+            boxselectModeendX = selectX;
+            boxselectModeendZ = selectZ;
         }
-
-        Shared.editorState.hasClicked = true;
-
-        markergroupxz.visible = false;
-        markergroupxy.visible = false;
-        markergroupyz.visible = false;
-
-        // if (event.shiftKey) { // console.log("Shift + Click detected");
-        boxselectModestartX = selectX;
-        boxselectModestartZ = selectZ;
-        boxselectModeendX = selectX;
-        boxselectModeendZ = selectZ;
         Shared.editorState.mouseIsDown = true;
     }
 
     //right click
-    if (event.button == 2){
+    // if (event.button == 2){
         // setEraser(true);//eraser on right click
-    }
+    // }
 
 }
 
@@ -659,36 +682,53 @@ export function onMouseClick(event) {
 export function onMouseUp(event) {
 
     if (!Shared.editorState.editorRunning) return;
-    
-    if (event.button == 0){
+
+
+    if (event.button == 0) {
+
         Shared.editorState.mouseIsDown = false;
 
-        if (currentAddMode != ADDPLANEMODE) {
-            return;
+        if (eraserMode) {
+            if(selectObj){
+                switch (selectObjDir) {
+                   case "XZ":  placeTile(selectObj,gridMapXZ,tileXZGroup); break;
+                   case "YZ":  placeTile(selectObj,gridMapYZ,tileYZGroup); break;
+                   case "XY":  placeTile(selectObj,gridMapXY,tileXYGroup); break;
+                   default: console.log("selectObjDir",selectObjDir,"not supported."); break;
+                }
+                raycastMeshXZArray = [];
+                raycastMeshYZArray = [];
+                raycastMeshXYArray = [];
+                selectObj = null;
+            }
+        } else {
+            if (currentAddMode != ADDPLANEMODE) {
+                return;
+            }
+
+            if (!selectValid) {
+                reinitMarker();
+                return;
+            }
+
+            //find material
+            let materialToApply = Shared.atlasMat;
+            if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
+            if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
+            if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
+
+            boxselectModeendX = boxselectModestartX;
+            boxselectModeendZ = boxselectModestartZ;
         }
-
-        if (!selectValid) {
-            reinitMarker();
-            return;
-        }
-
-        //find material
-        let materialToApply = Shared.atlasMat;
-        if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
-        if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
-        if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
-
-        boxselectModeendX = boxselectModestartX;
-        boxselectModeendZ = boxselectModestartZ;
     }
 
     //update tilecount
     // updateTileCount();
 
     //right click
-    if (event.button == 2){
+    // if (event.button == 2){
         // setEraser(false);
-    }
+    // }
 
     //reinitialize marker
     reinitMarker();
@@ -809,11 +849,13 @@ function movePlayer(delta) {
 
     if (Actions.nextMaterial) nextMaterial();
     if (Actions.prevMaterial) prevMaterial();
+    if (Actions.toggleEraser) toggleEraser();
     if (Actions.nextMesh) nextMesh();
+    if (Actions.prevMesh) prevMesh();
     if (Actions.saveLevel) saveLevel();
     if (Actions.bakeLevel) bakeLevel();
     if (Actions.loadLevel) loadLevel();
-    if (Actions.startGame) Shared.toggleGameMode();
+    if (Actions.startGame) toggleGameMode();
     if (Actions.nextMode) nextMode();
     if (Actions.prevMode) prevMode();
     // if (Actions.setAddPlaneMode) {
@@ -845,6 +887,11 @@ function movePlayer(delta) {
 /*---------------------------------*/
 // editorLoop
 /*---------------------------------*/
+let raycastMeshXZArray = [];
+let raycastMeshYZArray = [];
+let raycastMeshXYArray = [];
+let selectObj = null;
+let selectObjDir = "XY";
 function editorLoop() {
 
     if (!Shared.editorState.editorRunning) return;
@@ -860,166 +907,233 @@ function editorLoop() {
         Shared.editorState.renderOneFrame = false;
         movePlayer(deltaTime);
 
-        //FLOOR RAYCAST TEST
-        raycaster.setFromCamera(screenCenter, Shared.camera);
-        const intersects = raycaster.intersectObject(floor);
+        //If eraser mode set raycast against any geometry
+        if (eraserMode) {
 
-        selectValid = false;
-        markergroupxz.visible = false;
-        markergroupyz.visible = false;
-        markergroupxy.visible = false;
+            //build raycastMeshArray if not built
+            if (raycastMeshXZArray.length === 0) {
+                tileXZGroup.traverse(obj => {if (obj.isMesh) raycastMeshXZArray.push(obj);});
+                tileYZGroup.traverse(obj => {if (obj.isMesh) raycastMeshYZArray.push(obj);});
+                tileXYGroup.traverse(obj => {if (obj.isMesh) raycastMeshXYArray.push(obj);});
+            }
 
-        let doesIntersect = false;
-        if (intersects.length > 0) {
-            doesIntersect = intersects[0].distance < 12;
-        }
+            //perform the raycast
+            raycaster.setFromCamera(screenCenter, Shared.camera);
+            let doesIntersect = false;
+            const hits = [
+                {dir: "XZ", intersects: raycaster.intersectObjects(raycastMeshXZArray, false)},
+                {dir: "YZ", intersects: raycaster.intersectObjects(raycastMeshYZArray, false)},
+                {dir: "XY", intersects: raycaster.intersectObjects(raycastMeshXYArray, false)}
+            ];
 
-        if (doesIntersect) {
-            const point = intersects[0].point;
-            // console.log("intersectpoint",point);
-            selectValid = true;
-            markergroupxz.visible = showMarkerXZ;
-            markergroupyz.visible = showMarkerYZ;
-            markergroupxy.visible = showMarkerXY;
-            // Convert world position to grid cell
-            selectX = Math.floor(point.x / Shared.cellSize);
-            selectY = Shared.floorHeight;
-            selectZ = Math.floor(point.z / Shared.cellSize);
+            let closestHit = null;
+            let hitObjDir = null;
 
-            //UPDATE ONLY WHEN NEW CELL SELECTED
-            if (
-                (selectX != prevSelectX) ||
-                (selectZ != prevSelectZ) ||
-                wallModeSelect != prevWallModeSelect ||
-                Shared.editorState.hasClicked
-            ) {
-                Shared.editorState.hasClicked = false;
-                // console.log("newpoint");
+            hits.forEach(h => {
+                if (h.intersects.length > 0) {
+                    const hit = h.intersects[0];
+                    if (!closestHit || hit.distance < closestHit.distance) {
+                        closestHit = hit;
+                        hitObjDir = h.dir;
+                    }
+                }
+            });
 
-                if (!Shared.editorState.mouseIsDown) {
-                    // slightly above floor to prevent z-fighting
-                    markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
-                    markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
-                    markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
-                } else {
+            if (closestHit && closestHit.distance < 12) {
+                doesIntersect = true;
+            }
 
-                    //UPDATE SELECTION BBOX
-                    boxselectModeendX = selectX;
-                    boxselectModeendZ = selectZ;
+            if (doesIntersect) {
+                if (closestHit.object != selectObj) {
+                    if (selectObj) selectObj.material = Shared.atlasMat;
+                    selectObj = closestHit.object;
+                    selectObjDir = hitObjDir;
+                    selectObj.material = markerremovematerial;
 
-                    //UPDATE MARKER POSITION
-                    markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                    markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                    markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                    const ix = Math.floor(closestHit.point.x / Shared.cellSize);
+                    const iy = Math.floor(closestHit.point.y / Shared.cellSize);
+                    const iz = Math.floor(closestHit.point.z / Shared.cellSize);
+                    console.log(
+                        "Intersection found at grid:",
+                        ix, iy, iz,
+                        "| mesh:", selectObj.geometry.userData.meshname,
+                        "| uv:", selectObj.geometry.userData.uvname,
+                        "| distance:", closestHit.distance.toFixed(2)
+                    );
 
-                    //CLEAR MARKER MESHES
-                    markergroupxz.clear();
-                    markergroupyz.clear();
-                    markergroupxy.clear();
+                }
+            } else {
+                if (selectObj){
+                    selectObj.material = Shared.atlasMat;
+                    selectObj=null;
+                }
+                console.log("no intersection found");
+            }
+            
+        } else {
 
-                    //CALCULATE MARKER SIZE
-                    let scaleX = Math.abs(boxselectModeendX - boxselectModestartX);
-                    let scaleZ = Math.abs(boxselectModeendZ - boxselectModestartZ);
+            //FLOOR RAYCAST TEST
+            raycaster.setFromCamera(screenCenter, Shared.camera);
+            const intersects = raycaster.intersectObject(floor);
 
-                    //GENERATE MARKER MESHES
-                    //RED
-                    if (showMarkerXZ) {
-                        for (let x = 0; x <= scaleX; x++) {
-                            for (let z = 0; z <= scaleZ; z++) {
-                                const copytile = markerxz.clone();
-                                markergroupxz.add(copytile);
-                                copytile.position.set(x + Shared.cellSize / 2, 0, z + Shared.cellSize / 2);
+            selectValid = false;
+            markergroupxz.visible = false;
+            markergroupyz.visible = false;
+            markergroupxy.visible = false;
+
+            let doesIntersect = false;
+            if (intersects.length > 0) {
+                doesIntersect = intersects[0].distance < 12;
+            }
+
+            if (doesIntersect) {
+                const point = intersects[0].point;
+                // console.log("intersectpoint",point);
+                selectValid = true;
+                markergroupxz.visible = showMarkerXZ;
+                markergroupyz.visible = showMarkerYZ;
+                markergroupxy.visible = showMarkerXY;
+                // Convert world position to grid cell
+                selectX = Math.floor(point.x / Shared.cellSize);
+                selectY = Shared.floorHeight;
+                selectZ = Math.floor(point.z / Shared.cellSize);
+
+                //UPDATE ONLY WHEN NEW CELL SELECTED
+                if (
+                    (selectX != prevSelectX) ||
+                    (selectZ != prevSelectZ) ||
+                    wallModeSelect != prevWallModeSelect ||
+                    Shared.editorState.hasClicked
+                ) {
+                    Shared.editorState.hasClicked = false;
+                    // console.log("newpoint");
+
+                    if (!Shared.editorState.mouseIsDown) {
+                        // slightly above floor to prevent z-fighting
+                        markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                        markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                        markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                    } else {
+
+                        //UPDATE SELECTION BBOX
+                        boxselectModeendX = selectX;
+                        boxselectModeendZ = selectZ;
+
+                        //UPDATE MARKER POSITION
+                        markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                        markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                        markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+
+                        //CLEAR MARKER MESHES
+                        markergroupxz.clear();
+                        markergroupyz.clear();
+                        markergroupxy.clear();
+
+                        //CALCULATE MARKER SIZE
+                        let scaleX = Math.abs(boxselectModeendX - boxselectModestartX);
+                        let scaleZ = Math.abs(boxselectModeendZ - boxselectModestartZ);
+
+                        //GENERATE MARKER MESHES
+                        //RED
+                        if (showMarkerXZ) {
+                            for (let x = 0; x <= scaleX; x++) {
+                                for (let z = 0; z <= scaleZ; z++) {
+                                    const copytile = markerxz.clone();
+                                    markergroupxz.add(copytile);
+                                    copytile.position.set(x + Shared.cellSize / 2, 0, z + Shared.cellSize / 2);
+                                }
                             }
                         }
-                    }
 
-                    //GREEN
-                    if (showMarkerYZ) {
-                        for (let x = 0; x <= scaleX + 1; x++) {
-                            for (let z = 0; z <= scaleZ; z++) {
-                                //in normal mode adding walls we want to surround the area with walls
-                                //so add them everywhere except "inside" the selection
-                                let todelete = false;
-                                if (!eraserMode) {
+                        //GREEN
+                        if (showMarkerYZ) {
+                            for (let x = 0; x <= scaleX + 1; x++) {
+                                for (let z = 0; z <= scaleZ; z++) {
+                                    //in normal mode adding walls we want to surround the area with walls
+                                    //so add them everywhere except "inside" the selection
+                                    let todelete = false;
+                                    // if (!eraserMode) {
                                     if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
                                         if (x > 0 && x < scaleX + 1) todelete = true;
                                     } else {
                                         if (x > 0) continue;
                                     }
-                                } else {
-                                    if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
-                                        if (x > 0) continue;
-                                    }
-                                }
-                                for (let y = 0; y < Shared.wallHeight; y++) {
-                                    const copytile = markeryz.clone();
-                                    copytile.userData.todelete = todelete;
-                                    // copytile.userData = {
+                                    // } else {
+                                    //     if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
+                                    //         if (x > 0) continue;
+                                    //     }
+                                    // }
+                                    for (let y = 0; y < Shared.wallHeight; y++) {
+                                        const copytile = markeryz.clone();
+                                        copytile.userData.todelete = todelete;
+                                        // copytile.userData = {
                                         // todelete: todelete
-                                    // };
-                                    copytile.visible = !todelete;
-                                    markergroupyz.add(copytile);
-                                    copytile.position.copy(markeryz.position);
-                                    copytile.position.x += x;
-                                    copytile.position.z += z;
-                                    copytile.position.y += y;
+                                        // };
+                                        copytile.visible = !todelete;
+                                        markergroupyz.add(copytile);
+                                        copytile.position.copy(markeryz.position);
+                                        copytile.position.x += x;
+                                        copytile.position.z += z;
+                                        copytile.position.y += y;
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    //BLUE
-                    if (showMarkerXY) {
-                        for (let x = 0; x <= scaleX; x++) {
-                            for (let z = 0; z <= scaleZ + 1; z++) {
-                                let todelete = false;
-                                if (!eraserMode) {
+                        //BLUE
+                        if (showMarkerXY) {
+                            for (let x = 0; x <= scaleX; x++) {
+                                for (let z = 0; z <= scaleZ + 1; z++) {
+                                    let todelete = false;
+                                    // if (!eraserMode) {
                                     if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
                                         if (z > 0 && z < scaleZ + 1) todelete = true;
                                     } else {
                                         if (z > 0) continue;
                                     }
-                                } else {
-                                    if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
-                                        if (z > 0) continue;
-                                    }
-                                }
-                                for (let y = 0; y < Shared.wallHeight; y++) {
-                                    const copytile = markerxy.clone();
-                                    markergroupxy.add(copytile);
-                                    copytile.userData.todelete = todelete;
-                                    // copytile.userData = {
+                                    // } else {
+                                    //     if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
+                                    //         if (z > 0) continue;
+                                    //     }
+                                    // }
+                                    for (let y = 0; y < Shared.wallHeight; y++) {
+                                        const copytile = markerxy.clone();
+                                        markergroupxy.add(copytile);
+                                        copytile.userData.todelete = todelete;
+                                        // copytile.userData = {
                                         // todelete: todelete
-                                    // };
-                                    copytile.visible = !todelete;
-                                    copytile.position.copy(markerxy.position);
-                                    copytile.position.x += x;
-                                    copytile.position.z += z;
-                                    copytile.position.y += y;
+                                        // };
+                                        copytile.visible = !todelete;
+                                        copytile.position.copy(markerxy.position);
+                                        copytile.position.x += x;
+                                        copytile.position.z += z;
+                                        copytile.position.y += y;
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
+                //KEEP TRACK OF LAST SELECTED CELL
+                prevSelectX = selectX;
+                prevSelectZ = selectZ;
+                prevWallModeSelect = wallModeSelect;
+
+            } else {
+
+                //NO CELL SELECTED, REINIT MARKER AND BBOX
+                Shared.editorState.mouseIsDown = false;
+                //reinit marker only when it was valid before and
+                //it is not anymore
+                if (prevSelectValid)
+                    reinitMarker();
+
             }
 
-            //KEEP TRACK OF LAST SELECTED CELL
-            prevSelectX = selectX;
-            prevSelectZ = selectZ;
-            prevWallModeSelect = wallModeSelect;
-
-        } else {
-
-            //NO CELL SELECTED, REINIT MARKER AND BBOX
-            Shared.editorState.mouseIsDown = false;
-            //reinit marker only when it was valid before and
-            //it is not anymore
-            if (prevSelectValid)
-                reinitMarker();
+            prevSelectValid = selectValid;
 
         }
-
-        prevSelectValid = selectValid;
 
         //RENDER GIZMO HELPER in BOTTOM LEFT CORNER
         if (1) {
@@ -1235,6 +1349,7 @@ export function setAddMode(mode) {
 // loadLevel
 /*---------------------------------*/
 export async function loadLevel() {
+    setEraser(false);
     const file = await new Promise((resolve) => {
         const input = document.createElement("input");
         input.type = "file";
@@ -1279,7 +1394,7 @@ let loadingTile;
 async function loadPlanesIntoScene(jsondata) {
     resetLevel();
 
-    eraserMode = false;
+    // eraserMode = false;
 
     totalElements = Object.values(jsondata)
         .flatMap(axis => Object.values(axis))
@@ -1603,7 +1718,7 @@ export function compressFlattenedGrid(flatArray) {
 
         let str = "";
         for (let i = 0; i < cell.length; i++) {
-            const encoded = cell[i];
+            const encoded = parseInt(cell[i],16);
 
             // extract geometry ID only
             let geomId = encoded & (sceneGeometryMax - 1);
@@ -1806,7 +1921,7 @@ function generateGeometry(uvid,meshid) {
 }
 
 /*---------------------------------*/
-// loadFlattenedMap
+// indexToCoords
 /*---------------------------------*/
 // Helper: convert flat index to 3D coordinates
 // order is an array like ["x", "z", "y"] (raster order)
@@ -1831,6 +1946,7 @@ function indexToCoords(flatIndex, sizeX, sizeY, sizeZ, order, bb) {
 }
 
 /*---------------------------------*/
+// loadFlattenedMap
 // Generic loader
 /*---------------------------------*/
 function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, order = ["x", "z", "y"]) {
@@ -1949,4 +2065,9 @@ export function setFloorHeight(height){
 
 
     Shared.editorState.renderOneFrame = true;
+}
+
+function toggleGameMode() {
+    setEraser(false);
+    Shared.toggleGameMode();
 }
