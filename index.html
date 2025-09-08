@@ -75,7 +75,7 @@
             display: none;
         }
 
-        #popup {
+        .popup {
             position: absolute;
             left: 50%;
             top: 50%;
@@ -255,13 +255,14 @@
             <div id="pointer-lock-hint">Press ESC to release the mouse</div>
             <canvas id="hud-canvas"></canvas>
 
-            <!-- POPUP -->
-            <div id="popup">
-                <canvas id="atlasCanvas"></canvas>                
-                <!-- <div><button id="Item 1">Item 1</button></div> -->
-                <!-- <div>Item 2</div> -->
-                <!-- <div>Item 3</div> -->
-            </div>            
+            <!-- POPUPS -->
+            <div id="matpopup" class="popup">
+            <canvas id="matpopupCanvas"></canvas>
+            </div>
+
+            <div id="meshpopup" class="popup">
+            <canvas id="meshpopupCanvas"></canvas>
+            </div>
         </div>
 
         <div id="ui-panel">
@@ -280,7 +281,11 @@
                     </div>
                     <div class="form-row">
                         <label for="meshSelect">Mesh:</label>
-                        <select id="meshSelect"></select>
+                        <button id="meshSelectBtn">
+                            <canvas id="meshPreviewCanvas" width="64" height="64"></canvas>
+                        </button> 
+                        <!-- <label for="meshSelect">Mesh:</label> -->
+                        <!-- <select id="meshSelect"></select> -->
                     </div>
                     <div class="form-row">
                         <label for="wallHeightSelect">Wall Height:</label>
