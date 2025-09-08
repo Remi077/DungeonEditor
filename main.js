@@ -32,9 +32,9 @@ function isMobile() {
 }
 // Usage
 if (isMobile()) {
-    console.log("You're on a mobile device!");
+    console.log("You're on a mobile device! revision:", revision);
 } else {
-    console.log("You're on a desktop!");
+    console.log("You're on a desktop! revision:", revision);
 }
 
 
