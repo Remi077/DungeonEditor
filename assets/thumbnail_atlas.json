@@ -1,0 +1,131 @@
+{
+  "SIZE": 128,
+  "NUMX": 6,
+  "NUMY": 6,
+  "IMAGES": {
+    "Plane": {
+      "x": 0,
+      "y": 0
+    },
+    "Sphere": {
+      "x": 1,
+      "y": 0
+    },
+    "Cylinder": {
+      "x": 2,
+      "y": 0
+    },
+    "Torus": {
+      "x": 3,
+      "y": 0
+    },
+    "Arch": {
+      "x": 4,
+      "y": 0
+    },
+    "ArchWall": {
+      "x": 5,
+      "y": 0
+    },
+    "ArchInside": {
+      "x": 0,
+      "y": 1
+    },
+    "ArchBase": {
+      "x": 1,
+      "y": 1
+    },
+    "Pillar": {
+      "x": 2,
+      "y": 1
+    },
+    "PillarBase": {
+      "x": 3,
+      "y": 1
+    },
+    "RoundPillar": {
+      "x": 4,
+      "y": 1
+    },
+    "RoundPillarBase": {
+      "x": 5,
+      "y": 1
+    },
+    "ArchInsideHalf": {
+      "x": 0,
+      "y": 2
+    },
+    "Bump": {
+      "x": 1,
+      "y": 2
+    },
+    "PlaneRidge": {
+      "x": 2,
+      "y": 2
+    },
+    "PlaneCross": {
+      "x": 3,
+      "y": 2
+    },
+    "PlaneFrame": {
+      "x": 4,
+      "y": 2
+    },
+    "PlaneBump": {
+      "x": 5,
+      "y": 2
+    },
+    "Pillar45": {
+      "x": 0,
+      "y": 3
+    },
+    "PlaneFrame001": {
+      "x": 1,
+      "y": 3
+    },
+    "grid": {
+      "x": 2,
+      "y": 3
+    },
+    "gridsquare": {
+      "x": 3,
+      "y": 3
+    },
+    "Pillarindent": {
+      "x": 4,
+      "y": 3
+    },
+    "PillarBase2": {
+      "x": 5,
+      "y": 3
+    },
+    "ArchBigLeft": {
+      "x": 0,
+      "y": 4
+    },
+    "ArchBaseBig": {
+      "x": 1,
+      "y": 4
+    },
+    "dome": {
+      "x": 2,
+      "y": 4
+    },
+    "domequarter": {
+      "x": 3,
+      "y": 4
+    },
+    "domehalf": {
+      "x": 4,
+      "y": 4
+    },
+    "domehalfflat": {
+      "x": 5,
+      "y": 4
+    },
+    "ArchBigRight": {
+      "x": 0,
+      "y": 5
+    }
+  }
+}
