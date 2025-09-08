@@ -75,20 +75,25 @@ export let atlasUVsidx   = {};  //UV to index map (for fast lookup)
 export let atlasMat;
 export let atlasUVs;
 export let atlasMesh;
-export let atlasMeshArray = [];
-export let atlasMeshidx   = {};
-export let uvidBits       = 8;  //default
-export let meshidBits     = 8;  //default
+export let atlasMeshArray      = [];
+export let atlasMeshidx        = {};
+export let uvidBits            = 8;          //default
+export let meshidBits          = 8;          //default
 export const sceneGeometryDict = new Map();
+export let thumbDict           = {};         //thumbnail dictionary
+export let thumbDictUVsArray   = [];         //mesh array (from dictionary)
 
 //uv info
 export const uvInfo = {};
 
 // Dynamically create a canvas element
-export const canvas    = document.getElementById('three-canvas');
-export const container = document.getElementById('canvas-container');
-export const uipanel   = document.getElementById('ui-panel');
-export const popup     = document.getElementById("popup");
+export const canvas          = document.getElementById('three-canvas');
+export const container       = document.getElementById('canvas-container');
+export const uipanel         = document.getElementById('ui-panel');
+export const matpopup        = document.getElementById("matpopup");
+export const meshpopup       = document.getElementById("meshpopup");
+export const matpopupCanvas  = document.getElementById("matpopupCanvas");
+export const meshpopupCanvas = document.getElementById("meshpopupCanvas");
 
 // Scene, Camera, Renderer
 export const scene    = new THREE.Scene();
@@ -117,19 +122,21 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = true;
+    let online = false;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
         resourcesDict = await loadResourcesFromJson('./assets/resources.json');
     matDict    = resourcesDict.IMAGES;
     atlasDict  = resourcesDict.ATLAS.ATLAS0;
+    thumbDict  = resourcesDict.ATLAS.MESHTHUMBNAIL;
     atlasMat   = atlasDict.ATLASMATERIAL;
     atlasUVs   = atlasDict.UVS;
     atlasUVsArray = Object.entries(atlasUVs);
     atlasUVsArray.forEach(([key], idx) => {
         atlasUVsidx[key] = idx;// key -> index map for fast lookup
     });
+    thumbDictUVsArray = Object.entries(thumbDict.UVS);
     atlasMesh  = resourcesDict.MESHATLAS.ATLAS0;
     atlasMeshArray = Object.entries(atlasMesh);
     atlasMeshArray.forEach(([key], idx) => {
@@ -298,22 +305,37 @@ export function generateKeyToActionMaps(){
 // onKeyDownEvent
 /*---------------------------------*/
 export function onKeyDownEvent(event){
-    if (keyPressToActionMap[event.code])   //if mapping exists
-        Actions[keyPressToActionMap[event.code]] = true;
-    else if (keyPressOnceToActionMap[event.code])
-        Actions[keyPressOnceToActionMap[event.code]] = !keys[event.code];
 
-    if (event.code === "Tab") {
+    let eventcode = event.code
+    // Only prepend "Ctrl+" if the pressed key is NOT a modifier
+    if ((event.ctrlKey || event.metaKey) &&
+        event.code !== "ControlLeft" && event.code !== "ControlRight") {
+        eventcode = "Ctrl+" + eventcode;
+    }
+
+    if (keyPressToActionMap[eventcode])   //if mapping exists
+        Actions[keyPressToActionMap[eventcode]] = true;
+    else if (keyPressOnceToActionMap[eventcode])
+        Actions[keyPressOnceToActionMap[eventcode]] = !keys[eventcode];
+
+    if (eventcode === "Tab") {
         event.preventDefault(); // stop browser from changing focus
     }
 
-    keys[event.code] = true;//true all the time when key is pressed
+    keys[eventcode] = true;//true all the time when key is pressed
 }
 
 /*---------------------------------*/
 // onKeyUpEvent
 /*---------------------------------*/
 export function onKeyUpEvent(event){
+    // if key up is control set the ctrl+ keys to false
+    if (event.code === "ControlLeft" || event.code === "ControlRight") {
+        for (const key in keys) if (key.startsWith("Ctrl+")) keys[key] = false;
+    } else {
+        if (keys["Ctrl+"+event.code]) keys["Ctrl+"+event.code] = false;
+    }
+
     keys[event.code] = false;
     if (keyPressToActionMap[event.code])  //if mapping exists
         Actions[keyPressToActionMap[event.code]] = false;
