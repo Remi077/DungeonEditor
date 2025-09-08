@@ -2,11 +2,14 @@
     "ATLAS": {
         "ATLAS0": {
             "url": "./assets/atlas_512x512_18x64x64_nopad.json"
+        },
+        "MESHTHUMBNAIL": {
+            "url": "./assets/thumbnail_atlas.json"
         }
     },
     "MESHATLAS": {
         "ATLAS0": {
-            "url": "./assets/Meshes2.glb"
+            "url": "./assets/Meshes3.glb"
         }
     }
 }
