@@ -9,12 +9,13 @@ import * as GameHUD from '../game/gameHUD.js';
 /*-----------------------------------------------------*/
 // const AddBtn   = document.getElementById('AddBtn');
 // const AddLBtn  = document.getElementById('AddLBtn');
-const LoadBtn      = document.getElementById('LoadBtn');
-const SaveBtn      = document.getElementById('SaveBtn');
-const BakeBtn      = document.getElementById('BakeBtn');
-const ResetBtn     = document.getElementById('ResetBtn');
-const StartBtn     = document.getElementById('StartBtn');
-const matSelectBtn = document.getElementById("matSelectBtn");
+const LoadBtn       = document.getElementById('LoadBtn');
+const SaveBtn       = document.getElementById('SaveBtn');
+const BakeBtn       = document.getElementById('BakeBtn');
+const ResetBtn      = document.getElementById('ResetBtn');
+const StartBtn      = document.getElementById('StartBtn');
+const matSelectBtn  = document.getElementById("matSelectBtn");
+const meshSelectBtn = document.getElementById("meshSelectBtn");
 
 /*-----------------------------------------------------*/
 // BUTTON LISTENERS
@@ -34,13 +35,14 @@ SaveBtn.addEventListener('click', () => { Editor.saveLevel(); });
 BakeBtn.addEventListener('click', () => { Editor.bakeLevel(); });
 ResetBtn.addEventListener('click', () => { Editor.resetLevel(); });
 StartBtn.addEventListener('click', () => { Shared.toggleGameMode(); });
-matSelectBtn.addEventListener('click', () => { openPopup(true); });
+matSelectBtn.addEventListener('click', () => { openPopup(Shared.matpopup,true); });
+meshSelectBtn.addEventListener('click', () => { openPopup(Shared.meshpopup,true); });
 
 /*-----------------------------------------------------*/
 // COMBOBOX
 /*-----------------------------------------------------*/
 // const matSelect = document.getElementById("matSelect");
-const meshSelect = document.getElementById("meshSelect");
+// const meshSelect = document.getElementById("meshSelect");
 const wallHeightSelect = document.getElementById("wallHeightSelect");
 const floorHeightSelect = document.getElementById("floorHeightSelect");
 
@@ -61,10 +63,10 @@ const radios = document.querySelectorAll('input[name="wallOption"]');
 //     Editor.setMesh(event.target.selectedIndex,Editor.getCurrentMeshIndex());
 //     console.log("event.target.selectedIndex",event.target.selectedIndex);
 // });
-meshSelect.addEventListener("change", (event) => {
-    Editor.setCurrentMeshIndex(event.target.selectedIndex);
-    Editor.setMesh(Editor.getCurrentUVIndex(), event.target.selectedIndex);
-});
+// meshSelect.addEventListener("change", (event) => {
+//     Editor.setCurrentMeshIndex(event.target.selectedIndex);
+//     Editor.setMesh(Editor.getCurrentUVIndex(), event.target.selectedIndex);
+// });
 wallHeightSelect.addEventListener("change", (event) => {
     const value = parseInt(event.target.value, 10); // convert string → integer
     Editor.setWallHeight(value);
@@ -110,7 +112,12 @@ function onMouseUp(event){
     Editor.onMouseUp(event);
     //right click
     if (event.button == 2) {
-        openPopup();
+        // if (event.ctrlKey || event.metaKey) {
+        if (event.altKey) {
+            openPopup(Shared.meshpopup);
+        } else {
+            openPopup(Shared.matpopup);
+        }
         document.exitPointerLock();
     }
 }
@@ -228,17 +235,36 @@ document.addEventListener("UIChange", (e) => {
         //     }
         //     break;
         case "MeshChange":
-            // ensure the option exists before setting
-            const optionMeshExists = Array.from(meshSelect.options).some(
-                opt => opt.value === value
-            );
+            const meshPreviewCanvas = document.getElementById("meshPreviewCanvas");
+            const meshctx = meshPreviewCanvas.getContext("2d");
+            const meshatlasImage = Shared.thumbDict.ATLASMATERIAL.map.image;
 
-            if (optionMeshExists) {
-                meshSelect.value = value;
-            } else {
-                console.warn("No such mesh in combobox:", value);
-            }
-            break;            
+            // clear
+            meshctx.clearRect(0, 0, meshPreviewCanvas.width, meshPreviewCanvas.height);
+            
+            let meshsize = Shared.thumbDict.SIZE;
+            let meshnumy = Shared.thumbDict.NUMY-1;
+            const meshsubImageX = (Shared.thumbDictUVsArray[value][1]?.x || 0) * meshsize;
+            const meshsubImageY = (meshnumy-(Shared.thumbDictUVsArray[value][1]?.y || 0)) * meshsize;
+            // draw the selected subimage from the atlas into the preview canvas
+            meshctx.drawImage(
+                meshatlasImage,
+                meshsubImageX, meshsubImageY, meshsize, meshsize, // source
+                0, 0, meshPreviewCanvas.width, meshPreviewCanvas.height // destination
+            );
+            break;      
+        // case "MeshChange":
+        //     // ensure the option exists before setting
+        //     const optionMeshExists = Array.from(meshSelect.options).some(
+        //         opt => opt.value === value
+        //     );
+
+        //     if (optionMeshExists) {
+        //         meshSelect.value = value;
+        //     } else {
+        //         console.warn("No such mesh in combobox:", value);
+        //     }
+        //     break;      
         case "WallChange":
             // ensure the option exists before setting
             const optionWExists = Array.from(wallHeightSelect.options).some(
@@ -355,12 +381,12 @@ export function setupEditorUI() {
     // set mesh combobox
     // const meshSelect = document.getElementById("meshSelect");
     // fill combo with keys from atlasMesh
-    Object.keys(Shared.atlasMesh).forEach(key => {
-        const option = document.createElement("option");
-        option.value = key;
-        option.textContent = key;  // visible label
-        meshSelect.appendChild(option);
-    });
+    // Object.keys(Shared.atlasMesh).forEach(key => {
+    //     const option = document.createElement("option");
+    //     option.value = key;
+    //     option.textContent = key;  // visible label
+    //     meshSelect.appendChild(option);
+    // });
 
     // set mesh combobox
     // const heightSelect = document.getElementById("heightSelect");
@@ -382,90 +408,92 @@ export function setupEditorUI() {
     }
 
     //setup the popup atlas canvas
-    setupPopup();
+    setupPopup(Shared.matpopupCanvas,Shared.atlasMat.map.image,Shared.atlasDict.SIZE,Editor.setMaterial);
+    setupPopup(Shared.meshpopupCanvas,Shared.thumbDict.ATLASMATERIAL.map.image,Shared.thumbDict.SIZE,Editor.setMeshFromMeshindex);
 }
 
 /*-----------------------------------------------------*/
 // POPUP
 /*-----------------------------------------------------*/
 
-function openPopup(tr = false) {
-    Shared.popup.style.display = "block";
+function openPopup(thispopup, tr = false) {
+    thispopup.style.display = "block";
 
     // if (x !== null && y !== null) {
     if (tr) {
         // top-right corner
-        popup.style.top = "0px";
-        popup.style.right = "0px";
-        popup.style.left = "auto";
-        popup.style.bottom = "auto";
-        popup.style.transform = "none";
+        thispopup.style.top = "0px";
+        thispopup.style.right = "0px";
+        thispopup.style.left = "auto";
+        thispopup.style.bottom = "auto";
+        thispopup.style.transform = "none";
     } else {
         // center of screen
-        popup.style.left = "50%";
-        popup.style.top = "50%";
-        popup.style.right = "auto";
-        popup.style.bottom = "auto";
-        popup.style.transform = "translate(-50%, -50%)";
+        thispopup.style.left = "50%";
+        thispopup.style.top = "50%";
+        thispopup.style.right = "auto";
+        thispopup.style.bottom = "auto";
+        thispopup.style.transform = "translate(-50%, -50%)";
     }
 }
 export function closePopup(){
-    Shared.popup.style.display = "none"; // toggle off if already open
+    Shared.matpopup.style.display = "none"; // toggle off if already open
+    Shared.meshpopup.style.display = "none"; // toggle off if already open
 }
 
-function setupPopup() {
-    const atlasCanvas = document.getElementById("atlasCanvas");
-    const ctx = atlasCanvas.getContext("2d");
+function setupPopup(thiscanvas,thisimage,thiscellsize,thisaction) {
+    // const atlasCanvas = document.getElementById("atlasCanvas");
+    const ctx = thiscanvas.getContext("2d");
 
-    const texture = Shared.atlasMat.map;
-    const atlasImage = texture.image;  // this is the real <img> or <canvas>
+    // const texture = Shared.atlasMat.map;
+    // const atlasImage = texture.image;  // this is the real <img> or <canvas>
 
-    if (!atlasImage) {
+    if (!thisimage) {
         console.warn("Atlas texture has no image yet");
         return;
     }
 
-    atlasCanvas.width = atlasImage.width;
-    atlasCanvas.height = atlasImage.height;
+    thiscanvas.width = thisimage.width;
+    thiscanvas.height = thisimage.height;
 
-    ctx.drawImage(atlasImage, 0, 0);
+    ctx.drawImage(thisimage, 0, 0);
 
 
-    const cellSize = Shared.atlasDict.SIZE; // adjust to your atlas tile size
+    // const cellSize = Shared.atlasDict.SIZE; // adjust to your atlas tile size
 
-    atlasCanvas.addEventListener("click", (e) => {
-        const rect = atlasCanvas.getBoundingClientRect();
+    thiscanvas.addEventListener("click", (e) => {
+        const rect = thiscanvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        const col = Math.floor(x / cellSize);
-        const row = Math.floor(y / cellSize);
-        const index = row * (atlasCanvas.width / cellSize) + col;
+        const col = Math.floor(x / thiscellsize);
+        const row = Math.floor(y / thiscellsize);
+        const index = row * (thiscanvas.width / thiscellsize) + col;
 
         // console.log("Clicked subimage:", { row, col, index });
 
-        Editor.setMaterial(index);
+        thisaction(index);
 
         closePopup();
         Shared.canvas.requestPointerLock()
     });
 
-    atlasCanvas.addEventListener("mousemove", (e) => {
-        const rect = atlasCanvas.getBoundingClientRect();
+    thiscanvas.addEventListener("mousemove", (e) => {
+        const rect = thiscanvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        const col = Math.floor(x / cellSize);
-        const row = Math.floor(y / cellSize);
+        const col = Math.floor(x / thiscellsize);
+        const row = Math.floor(y / thiscellsize);
 
         // redraw atlas
-        ctx.clearRect(0, 0, atlasCanvas.width, atlasCanvas.height);
-        ctx.drawImage(atlasImage, 0, 0);
+        ctx.clearRect(0, 0, thiscanvas.width, thiscanvas.height);
+        ctx.drawImage(thisimage, 0, 0);
 
         // highlight hovered cell
         ctx.strokeStyle = "yellow";
         ctx.lineWidth = 2;
-        ctx.strokeRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        ctx.strokeRect(col * thiscellsize, row * thiscellsize, thiscellsize, thiscellsize);
 
     });
 
