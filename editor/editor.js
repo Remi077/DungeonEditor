@@ -69,6 +69,10 @@ let markergroupxz;
 let markergroupyz;
 let markergroupxy;
 
+let undogroupxz;
+let undogroupyz;
+let undogroupxy;
+
 let markerxzmaterial;
 let markeryzmaterial;
 let markerxymaterial;
@@ -110,6 +114,8 @@ export let ActionToKeyMap = {
     startGame      : { key: 'KeyG', OnPress: true },
     nextMode       : { key: 'PageUp', OnPress: true },
     prevMode       : { key: 'PageDown', OnPress: true },
+
+    undo           : { key: 'Ctrl+KeyZ', OnPress: true }, //handled in onkeydownevent
 
     showXZ: { key: 'Digit1', OnPress: true },
     showYZ: { key: 'Digit2', OnPress: true },
@@ -353,7 +359,10 @@ function setEraser(enabled) {
         raycastMeshXZArray = [];
         raycastMeshYZArray = [];
         raycastMeshXYArray = [];
-        if (selectObj) selectObj.material = Shared.atlasMat;
+        if (selectObj) {
+            selectObj.material = Shared.atlasMat;
+            selectObj.position.y -= Shared.EPSILON;
+        }
         selectObj=null;
         markergroupxz.visible = showMarkerXZ;
         markergroupyz.visible = showMarkerYZ;
@@ -458,12 +467,18 @@ export function getCurrentMeshIndex(){return currentMeshIndex;}
 
 function toggleMesh(increment){
     let l = Shared.atlasMeshArray.length;
-    currentMeshIndex = (((currentMeshIndex + increment) % l) + l) % l;
-    let currentName = Shared.atlasMeshArray[currentMeshIndex][0];
-    setMesh(currentUVIndex,currentMeshIndex);
+    let newmeshindex = (((currentMeshIndex + increment) % l) + l) % l;
+    setMeshFromMeshindex(newmeshindex);
+}
+
+export function setMeshFromMeshindex(meshindex){
+    currentMeshIndex = meshindex;
+    let currentName = Shared.atlasMeshArray[meshindex][0];
+    setMesh(currentUVIndex,meshindex);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
-        detail: { field: "MeshChange", value: currentName },
+        // detail: { field: "MeshChange", value: currentName },
+        detail: { field: "MeshChange", value: meshindex },
         bubbles: true // optional, allows event to bubble up
     });
     document.dispatchEvent(event);
@@ -486,17 +501,17 @@ export function setMesh(uvid, meshid) {
 /*---------------------------------*/
 // placeGroup
 /*---------------------------------*/
-function placeGroup(group, targetgroup, grid, material) {
+function placeGroup(group, targetgroup, grid, material, undogroup=null) {
     while (group.children.length > 0) {
         let child = group.children[0];
-        placeTile(child, grid, targetgroup);
+        placeTile(child, grid, targetgroup, undogroup);
         //child is removed when userData and todelete are defined (?option) and todelete is true
         //for mode MODEW or MODEA we want the scene walls intersecting with the BB to be deleted
         //so the current inner invisible "todelete" walls are tested against these to cull them 
         // in placeTile function
         //then we remove them in following lines
         if (
-            // eraserMode || 
+            eraserMode ||
             child.userData?.todelete) {
             group.remove(child);
         } else {
@@ -546,7 +561,7 @@ function placeLight(lightv, lighthelperv) {
 /*---------------------------------*/
 
 const worldPos = new THREE.Vector3();
-function placeTile(tile, gridmap, group) {
+function placeTile(tile, gridmap, group, undogroup=null) {
 
     tile.getWorldPosition(worldPos);
     let wx = Math.floor(worldPos.x / Shared.cellSize);
@@ -555,6 +570,7 @@ function placeTile(tile, gridmap, group) {
     const key = Shared.getGridKey(wx, wy, wz);
     const meshname = tile.geometry.userData?.meshname || "Plane";
 
+    let undotile = null;
     if (gridmap.has(key)) {
         const gridtiles = gridmap.get(key);
         // if (eraserMode) {
@@ -571,9 +587,16 @@ function placeTile(tile, gridmap, group) {
             if (gridtiles.has(meshname)) {
                 const tiletoremove = gridtiles.get(meshname);
                 if (tiletoremove) {
+                    //record the tile to readd if undo
+                    if (undogroup) {
+                        undotile = tiletoremove.clone()
+                        undogroup.add(undotile);
+                        undotile.position.copy(worldPos);
+                    }
+
                     group.remove(tiletoremove);
-                    tiletoremove.geometry.dispose();
-                    tiletoremove.material.dispose();
+                    // tiletoremove.geometry.dispose();
+                    // tiletoremove.material.dispose();
                 }
                 gridtiles.delete(meshname);
             }
@@ -590,6 +613,16 @@ function placeTile(tile, gridmap, group) {
 
     //otherwise add tile now
     uniquifyGeometry(tile);
+
+    //record the tile to remove if undo
+    if (undogroup && !undotile){
+        undotile = tile.clone();
+        undotile.userData.todelete = true;
+        undogroup.add(undotile);
+        undotile.position.copy(worldPos);        
+    }
+
+    //add tile to the group
     group.add(tile); // This automatically removes it from sourceGroup
     tile.position.copy(worldPos);
 
@@ -690,10 +723,19 @@ export function onMouseUp(event) {
 
         if (eraserMode) {
             if(selectObj){
+
+                //buffer undo groups
+                undogroupxz = null;
+                undogroupyz = null;
+                undogroupxy = null;
+                if (showMarkerXZ) undogroupxz = new THREE.Group();
+                if (showMarkerYZ) undogroupyz = new THREE.Group();
+                if (showMarkerXY) undogroupxy = new THREE.Group();
+
                 switch (selectObjDir) {
-                   case "XZ":  placeTile(selectObj,gridMapXZ,tileXZGroup); break;
-                   case "YZ":  placeTile(selectObj,gridMapYZ,tileYZGroup); break;
-                   case "XY":  placeTile(selectObj,gridMapXY,tileXYGroup); break;
+                   case "XZ":  placeTile(selectObj,gridMapXZ,tileXZGroup,undogroupxz); break;
+                   case "YZ":  placeTile(selectObj,gridMapYZ,tileYZGroup,undogroupyz); break;
+                   case "XY":  placeTile(selectObj,gridMapXY,tileXYGroup,undogroupxy); break;
                    default: console.log("selectObjDir",selectObjDir,"not supported."); break;
                 }
                 raycastMeshXZArray = [];
@@ -711,11 +753,19 @@ export function onMouseUp(event) {
                 return;
             }
 
+            //buffer undo groups
+            undogroupxz = null;
+            undogroupyz = null;
+            undogroupxy = null;
+            if (showMarkerXZ) undogroupxz = new THREE.Group();
+            if (showMarkerYZ) undogroupyz = new THREE.Group();
+            if (showMarkerXY) undogroupxy = new THREE.Group();
+
             //find material
             let materialToApply = Shared.atlasMat;
-            if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
-            if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
-            if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
+            if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply, undogroupxz);
+            if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply, undogroupyz);
+            if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply, undogroupxy);
 
             boxselectModeendX = boxselectModestartX;
             boxselectModeendZ = boxselectModestartZ;
@@ -858,6 +908,7 @@ function movePlayer(delta) {
     if (Actions.startGame) toggleGameMode();
     if (Actions.nextMode) nextMode();
     if (Actions.prevMode) prevMode();
+    if (Actions.undo) undo();
     // if (Actions.setAddPlaneMode) {
     if (Actions.nextMode || Actions.prevMode) {
         const event = new CustomEvent("UIChange", {
@@ -945,10 +996,14 @@ function editorLoop() {
 
             if (doesIntersect) {
                 if (closestHit.object != selectObj) {
-                    if (selectObj) selectObj.material = Shared.atlasMat;
+                    if (selectObj) {
+                        selectObj.material = Shared.atlasMat;
+                        selectObj.position.y -= Shared.EPSILON;
+                    }
                     selectObj = closestHit.object;
                     selectObjDir = hitObjDir;
                     selectObj.material = markerremovematerial;
+                    selectObj.position.y += Shared.EPSILON;
 
                     const ix = Math.floor(closestHit.point.x / Shared.cellSize);
                     const iy = Math.floor(closestHit.point.y / Shared.cellSize);
@@ -965,6 +1020,7 @@ function editorLoop() {
             } else {
                 if (selectObj){
                     selectObj.material = Shared.atlasMat;
+                    selectObj.position.y -= Shared.EPSILON;
                     selectObj=null;
                 }
                 console.log("no intersection found");
@@ -1172,11 +1228,12 @@ function editorLoop() {
         // Simulate heavy computation
         if (0) Stats.simulateBlockingWait(200); // 200ms delay
         Stats.updateTextStatsThrottled();
-        //clear the onpress/onrelease actions now that they have been sampled 
-        //in that loop to avoid resampling
-        Shared.releaseSingleEventActions();
         Stats.stats.end();
     }
+
+    //clear the onpress/onrelease actions now that they have been sampled 
+    //in that loop to avoid resampling
+    Shared.releaseSingleEventActions();
 
     editorId = requestAnimationFrame(editorLoop); //call animate recursively on next frame 
 
@@ -2070,4 +2127,15 @@ export function setFloorHeight(height){
 function toggleGameMode() {
     setEraser(false);
     Shared.toggleGameMode();
+}
+
+function undo(){
+    console.log("UNDO");
+    let prevEraserMode = eraserMode;
+    setEraser(false);
+    let materialToApply = Shared.atlasMat;
+    if (undogroupxz && undogroupxz.children.length>0) placeGroup(undogroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
+    if (undogroupyz && undogroupyz.children.length>0) placeGroup(undogroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
+    if (undogroupxy && undogroupxy.children.length>0) placeGroup(undogroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
+    setEraser(prevEraserMode);
 }
