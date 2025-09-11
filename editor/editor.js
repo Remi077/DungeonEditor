@@ -22,6 +22,13 @@ const MODEW = 3;
 const MODEA = 4;
 const NUMMODES = 5;
 
+// rotation and offset per plane
+const RotOffsetPerSlice = {
+    XZ: { pos: new THREE.Vector3(0.5, 0, 0.5), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0, Math.PI, 0)) },
+    YZ: { pos: new THREE.Vector3(0, 0.5, 0.5), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, 0, Math.PI / 2)) },
+    XY: { pos: new THREE.Vector3(0.5, 0.5, 0), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)) }
+};
+
 /*-----------------------------------------------------*/
 // GAMEPLAY GLOBAL VARIABLES
 /*-----------------------------------------------------*/
@@ -33,12 +40,6 @@ export let Actions = {};
 let markerGeom;
 let currentUVIndex = 0;
 let currentMeshIndex = 0;
-
-// groups holding plane tiles
-let tileXZGroup = new THREE.Group(); tileXZGroup.name = "tileXZGroup";
-let tileXYGroup = new THREE.Group(); tileXYGroup.name = "tileXYGroup";
-let tileYZGroup = new THREE.Group(); tileYZGroup.name = "tileYZGroup";
-// let tilecount = 0; //holds total number of tiles
 
 // groups holding lights and helpers
 let lightGroup = new THREE.Group(); lightGroup.name = "lightGroup";
@@ -69,9 +70,8 @@ let markergroupxz;
 let markergroupyz;
 let markergroupxy;
 
-let undogroupxz;
-let undogroupyz;
-let undogroupxy;
+const undogroups = [];
+let undogroup = [];
 
 let markerxzmaterial;
 let markeryzmaterial;
@@ -85,45 +85,40 @@ let showMarkerXY = false;
 
 let eraserMode     = false;
 
-// holds baked geometry
-let bakedGeometry;
-let bakedMesh;
+// holds baked chunk geometry
+let chunksInScene = {};
 
 /*-----------------------------------------------------*/
 // EDITOR ACTIONS TO KEY MAPPING AND REVERSE
 /*-----------------------------------------------------*/
 export let ActionToKeyMap = {
-    moveCamUp      : { key: 'ShiftLeft' },
-    moveCamDown    : { key: 'Space' },
-    moveCamRight   : { key: 'KeyD' },
-    moveCamLeft    : { key: 'KeyA' },
-    moveCamFront   : { key: 'KeyW' },
-    moveCamBack    : { key: 'KeyS' },
+    moveCamUp   : { key: 'ShiftLeft' },
+    moveCamDown : { key: 'Space' },
+    moveCamRight: { key: 'KeyD' },
+    moveCamLeft : { key: 'KeyA' },
+    moveCamFront: { key: 'KeyW' },
+    moveCamBack : { key: 'KeyS' },
     // setAddPlaneMode: { key: 'Digit1', OnPress: true },
     // setAddLightMode: { key: 'Digit2', OnPress: true },
     // setAddMeshMode : { key: 'Digit3', OnPress: true },
-    pause          : { key: 'KeyP', OnRelease: true },     //triggered once only at release
-    prevMaterial   : { key: 'KeyQ', OnPress: true },
-    nextMaterial   : { key: 'KeyE', OnPress: true },
-    toggleEraser   : { key: 'KeyR', OnPress: true }, 
-    nextMesh       : { key: 'KeyC', OnPress: true },
-    prevMesh       : { key: 'KeyZ', OnPress: true },
-    saveLevel      : { key: 'KeyT', OnPress: true },
-    bakeLevel      : { key: 'KeyB', OnPress: true },
-    loadLevel      : { key: 'KeyL', OnPress: true },
-    startGame      : { key: 'KeyG', OnPress: true },
-    nextMode       : { key: 'PageUp', OnPress: true },
-    prevMode       : { key: 'PageDown', OnPress: true },
-
-    undo           : { key: 'Ctrl+KeyZ', OnPress: true }, //handled in onkeydownevent
-
-    showXZ: { key: 'Digit1', OnPress: true },
-    showYZ: { key: 'Digit2', OnPress: true },
-    showXY: { key: 'Digit3', OnPress: true },
-    showW : { key: 'Digit4', OnPress: true },
-    showA : { key: 'Digit5', OnPress: true },
+    pause       : { key: 'KeyP', OnRelease: true },  //triggered once only at release
+    prevMaterial: { key: 'KeyQ', OnPress: true },
+    nextMaterial: { key: 'KeyE', OnPress: true },
+    toggleEraser: { key: 'KeyR', OnPress: true },
+    nextMesh    : { key: 'KeyC', OnPress: true },
+    prevMesh    : { key: 'KeyZ', OnPress: true },
+    saveLevel   : { key: 'KeyT', OnPress: true },
+    loadLevel   : { key: 'KeyL', OnPress: true },
+    startGame   : { key: 'KeyG', OnPress: true },
+    nextMode    : { key: 'PageUp', OnPress: true },
+    prevMode    : { key: 'PageDown', OnPress: true },
+    undo        : { key: 'Ctrl+KeyZ', OnPress: true },
+    showXZ      : { key: 'Digit1', OnPress: true },
+    showYZ      : { key: 'Digit2', OnPress: true },
+    showXY      : { key: 'Digit3', OnPress: true },
+    showW       : { key: 'Digit4', OnPress: true },
+    showA       : { key: 'Digit5', OnPress: true },
 };
-
 
 /*-----------------------------------------------------*/
 // PRELIMINARIES
@@ -197,18 +192,16 @@ function setMeshPosition() {
 /*---------------------------------*/
 let scene;
 let sceneGeometryDict;
-let gridMapXZ; 
-let gridMapYZ; 
-let gridMapXY; 
+let gridMapChunk;
+let gridMap;
 export function setupEditor() {
 
     //setup local references to be able to watch them
     //in debugger
     scene = Shared.scene;
     sceneGeometryDict = Shared.sceneGeometryDict;
-    gridMapXZ = Shared.gridMapXZ;
-    gridMapYZ = Shared.gridMapYZ;
-    gridMapXY = Shared.gridMapXY;
+    gridMapChunk   = Shared.gridMapChunk;
+    gridMap = Shared.gridMap;
 
     Shared.sceneGeometryDict.clear();
 
@@ -244,9 +237,14 @@ export function setupEditor() {
     Object.assign(markerremovematerial,
         {
             side: THREE.DoubleSide,
-            transparent: true,
-            // transparent: false,
-            opacity: 0.5
+            // transparent: true,
+            // opacity: 0.5,
+            transparent: false,
+            // wireframe: true,
+            // linewidth: 100,//wireframe thickness, doesnt work on windows
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
         });
 
     markerxzmaterial.color.set(0x00ff00);  //XZ: horizontal plane, green
@@ -289,6 +287,9 @@ export function setupEditor() {
     Shared.scene.add(markergroupyz);
     Shared.scene.add(markergroupxy);
 
+    //chunks group
+    Shared.scene.add(Shared.chunksGroup);
+
     // create the scene
     createScene();
 
@@ -315,7 +316,6 @@ export function startEditorLoop() {
     // gridtwo.visible              = false;
     axes.visible                 = true;
     lightHelperGroup.visible     = true;
-
 }
 
 /*---------------------------------*/
@@ -336,7 +336,6 @@ export function stopEditorLoop() {
     // gridtwo.visible              = false;
     axes.visible                 = false;
     lightHelperGroup.visible     = false;
-
 }
 
 /*---------------------------------*/
@@ -356,14 +355,13 @@ function setEraser(enabled) {
         markergroupyz.visible = false;
         markergroupxy.visible = false;        
     } else {
-        raycastMeshXZArray = [];
-        raycastMeshYZArray = [];
-        raycastMeshXYArray = [];
         if (selectObj) {
-            selectObj.material = Shared.atlasMat;
-            selectObj.position.y -= Shared.EPSILON;
+            selectObj.geometry.dispose();
+            Shared.scene.remove(selectObj);
+            selectObj=null;
         }
-        selectObj=null;
+        selectInfo = null;
+        prevSelectInfo = null;
         markergroupxz.visible = showMarkerXZ;
         markergroupyz.visible = showMarkerYZ;
         markergroupxy.visible = showMarkerXY;
@@ -421,8 +419,6 @@ export function setWallMode(newWallModeSelect) {
 
 }
 
-
-
 function nextMaterial() {
     toggleMaterial(1);
 }
@@ -445,10 +441,6 @@ export function setMaterial(uvIndex){
     let currentName = Shared.atlasUVsArray[uvIndex][0];
     setMesh(uvIndex,currentMeshIndex);
     //notify the UI back to update the selected combobox
-    // const event = new CustomEvent("UIChange", {
-    //     detail: { field: "MaterialChange", value: currentName },
-    //     bubbles: true // optional, allows event to bubble up
-    // });
     const event = new CustomEvent("UIChange", {
         detail: { field: "MaterialChange", value: uvIndex },
         bubbles: true // optional, allows event to bubble up
@@ -477,7 +469,6 @@ export function setMeshFromMeshindex(meshindex){
     setMesh(currentUVIndex,meshindex);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
-        // detail: { field: "MeshChange", value: currentName },
         detail: { field: "MeshChange", value: meshindex },
         bubbles: true // optional, allows event to bubble up
     });
@@ -501,26 +492,14 @@ export function setMesh(uvid, meshid) {
 /*---------------------------------*/
 // placeGroup
 /*---------------------------------*/
-function placeGroup(group, targetgroup, grid, material, undogroup=null) {
+function placeGroup(group, direction) {
     while (group.children.length > 0) {
         let child = group.children[0];
-        placeTile(child, grid, targetgroup, undogroup);
-        //child is removed when userData and todelete are defined (?option) and todelete is true
-        //for mode MODEW or MODEA we want the scene walls intersecting with the BB to be deleted
-        //so the current inner invisible "todelete" walls are tested against these to cull them 
-        // in placeTile function
-        //then we remove them in following lines
-        if (
-            eraserMode ||
-            child.userData?.todelete) {
-            group.remove(child);
-        } else {
-            child.position.y -= Shared.EPSILON;//remove Shared.EPSILON vertical offset
-            if (material)
-                child.material = material;//apply material without transparency/tint
-        }
+        placeTileFromMesh(child, direction);
+        group.remove(child);
     }
 }
+
 
 /*---------------------------------*/
 // placeLight
@@ -561,110 +540,73 @@ function placeLight(lightv, lighthelperv) {
 /*---------------------------------*/
 
 const worldPos = new THREE.Vector3();
-function placeTile(tile, gridmap, group, undogroup=null) {
+function placeTileFromMesh(tilemesh, direction, erase=false) {
 
-    tile.getWorldPosition(worldPos);
+    tilemesh.getWorldPosition(worldPos);
+    let uvmeshid = tilemesh.geometry.userData.uvmeshid;
     let wx = Math.floor(worldPos.x / Shared.cellSize);
     let wy = Math.floor(worldPos.y / Shared.cellSize);
     let wz = Math.floor(worldPos.z / Shared.cellSize);
-    const key = Shared.getGridKey(wx, wy, wz);
-    const meshname = tile.geometry.userData?.meshname || "Plane";
+    const meshname = tilemesh.geometry.userData?.meshname || "Plane";
 
-    let undotile = null;
-    if (gridmap.has(key)) {
-        const gridtiles = gridmap.get(key);
-        // if (eraserMode) {
-        //     // Remove all tiles at this grid cell
-        //     for (const tiletoremove of gridtiles.values()) {
-        //         if (tiletoremove) {
-        //             group.remove(tiletoremove);
-        //             tiletoremove.geometry.dispose();
-        //             tiletoremove.material.dispose();
-        //         }
-        //     }
-        //     gridtiles.clear();
-        // } else {
-            if (gridtiles.has(meshname)) {
-                const tiletoremove = gridtiles.get(meshname);
-                if (tiletoremove) {
-                    //record the tile to readd if undo
-                    if (undogroup) {
-                        undotile = tiletoremove.clone()
-                        undogroup.add(undotile);
-                        undotile.position.copy(worldPos);
-                    }
-
-                    group.remove(tiletoremove);
-                    // tiletoremove.geometry.dispose();
-                    // tiletoremove.material.dispose();
-                }
-                gridtiles.delete(meshname);
-            }
-        // }
-        if (gridtiles.size === 0)
-            gridmap.delete(key);
-    }
-
-    //if eraser mode we finished our work here
-    if (
-        eraserMode ||
-        tile.userData?.todelete
-    ) return;
-
-    //otherwise add tile now
-    uniquifyGeometry(tile);
-
-    //record the tile to remove if undo
-    if (undogroup && !undotile){
-        undotile = tile.clone();
-        undotile.userData.todelete = true;
-        undogroup.add(undotile);
-        undotile.position.copy(worldPos);        
-    }
-
-    //add tile to the group
-    group.add(tile); // This automatically removes it from sourceGroup
-    tile.position.copy(worldPos);
-
-    //update the gridmap
-    let newgridtiles = gridmap.get(key);
-    if (!newgridtiles) {
-        newgridtiles = new Map();
-        gridmap.set(key, newgridtiles);
-    }
-    newgridtiles.set(meshname,tile);
+    placeTile(wx,wy,wz,direction,uvmeshid,meshname,erase);
 
 }
 
-/*---------------------------------*/
-// uniquifyGeometry
-/*---------------------------------*/
-function uniquifyGeometry(mesh) {
-    const g = mesh.geometry;
-    const id = g.userData?.uvmeshid;
+function placeTile(wx,wy,wz,direction,uvmeshid,meshname,erase=false,undoable=true) {
 
-    if (!id) {
-        console.error("uvmeshid not defined for mesh");
-        return;
+    const undoitem = {
+            wx:wx,
+            wy:wy,
+            wz:wz,
+            direction:direction,
+            uvmeshid:uvmeshid,
+            meshname:meshname,
+            erase:!erase //erase undoes add and vice versa
+        };
+
+    const chunkkey = Shared.getGridChunkKey(wx, wy, wz);
+    const tilekey = Shared.getGridKey(wx, wy, wz);
+
+    let tile = gridMap[direction].get(tilekey);
+    let chunk = gridMapChunk.get(chunkkey);
+
+    // Eraser mode
+    if (tile && meshname in tile) {
+        //if a tile is replaced, do not mark as erase and record the erased tile instead
+        undoitem.uvmeshid = tile[meshname];
+        undoitem.erase = false;
+        delete tile[meshname];
+        if (chunk) chunk.dirty = true;
+        //handle the mapping update (deletion) in rebuildDirtyChunk
     }
 
-    // If we already have a cached geometry with this id
-    if (Shared.sceneGeometryDict.has(id)) {
-        const cachedg = Shared.sceneGeometryDict.get(id);
+    if (undoable) undogroup.push(undoitem);
 
-        // Reuse the cached one
-        mesh.geometry = cachedg;
+    if (erase) return;
 
-    } else {
-        // Otherwise clone this geometry to make it unique and store it in the dict
-        const clonedg = g.clone();
-        // reassign userData as we dont want to hold on a shared reference
-        clonedg.userData = { ...g.userData };
-        mesh.geometry = clonedg;
-        Shared.sceneGeometryDict.set(id, clonedg);
+    // Add/update tile
+    if (!tile) {
+        tile = {};
+        gridMap[direction].set(tilekey, tile);
+
+        if (!chunk) {
+            chunk = {
+                dirty: true,
+                XZ: new Map(),
+                YZ: new Map(),
+                XY: new Map()
+            };
+            gridMapChunk.set(chunkkey, chunk);
+        }
+
+        chunk[direction].set(tilekey, tile);
     }
+
+    tile[meshname] = uvmeshid;
+    chunk.dirty = true;
+
 }
-
 
 
 /*---------------------------------*/
@@ -722,26 +664,21 @@ export function onMouseUp(event) {
         Shared.editorState.mouseIsDown = false;
 
         if (eraserMode) {
-            if(selectObj){
+            if(selectObj && selectInfo){
 
-                //buffer undo groups
-                undogroupxz = null;
-                undogroupyz = null;
-                undogroupxy = null;
-                if (showMarkerXZ) undogroupxz = new THREE.Group();
-                if (showMarkerYZ) undogroupyz = new THREE.Group();
-                if (showMarkerXY) undogroupxy = new THREE.Group();
+                placeTileFromMesh(selectObj, selectInfo.direction, true);
 
-                switch (selectObjDir) {
-                   case "XZ":  placeTile(selectObj,gridMapXZ,tileXZGroup,undogroupxz); break;
-                   case "YZ":  placeTile(selectObj,gridMapYZ,tileYZGroup,undogroupyz); break;
-                   case "XY":  placeTile(selectObj,gridMapXY,tileXYGroup,undogroupxy); break;
-                   default: console.log("selectObjDir",selectObjDir,"not supported."); break;
+                enqueueundo(undogroup);
+                undogroup = [];
+
+                if (selectObj) {
+                    selectObj.geometry.dispose();
+                    Shared.scene.remove(selectObj);
+                    selectObj = null;
                 }
-                raycastMeshXZArray = [];
-                raycastMeshYZArray = [];
-                raycastMeshXYArray = [];
+                selectInfo = null;
                 selectObj = null;
+
             }
         } else {
             if (currentAddMode != ADDPLANEMODE) {
@@ -753,32 +690,18 @@ export function onMouseUp(event) {
                 return;
             }
 
-            //buffer undo groups
-            undogroupxz = null;
-            undogroupyz = null;
-            undogroupxy = null;
-            if (showMarkerXZ) undogroupxz = new THREE.Group();
-            if (showMarkerYZ) undogroupyz = new THREE.Group();
-            if (showMarkerXY) undogroupxy = new THREE.Group();
-
             //find material
-            let materialToApply = Shared.atlasMat;
-            if (showMarkerXZ) placeGroup(markergroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply, undogroupxz);
-            if (showMarkerYZ) placeGroup(markergroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply, undogroupyz);
-            if (showMarkerXY) placeGroup(markergroupxy, tileXYGroup, Shared.gridMapXY, materialToApply, undogroupxy);
+            if (showMarkerXZ) placeGroup(markergroupxz, "XZ");
+            if (showMarkerYZ) placeGroup(markergroupyz, "YZ");
+            if (showMarkerXY) placeGroup(markergroupxy, "XY");
+
+            enqueueundo(undogroup);
+            undogroup = [];
 
             boxselectModeendX = boxselectModestartX;
             boxselectModeendZ = boxselectModestartZ;
         }
     }
-
-    //update tilecount
-    // updateTileCount();
-
-    //right click
-    // if (event.button == 2){
-        // setEraser(false);
-    // }
 
     //reinitialize marker
     reinitMarker();
@@ -854,10 +777,8 @@ export function onMouseWheel(event) {
 
     }else{
         if (event.deltaY < 0) {
-            // nextWall();
             nextWallHeight();
         } else {
-            // prevWall();
             prevWallHeight();
         }
 
@@ -903,7 +824,6 @@ function movePlayer(delta) {
     if (Actions.nextMesh) nextMesh();
     if (Actions.prevMesh) prevMesh();
     if (Actions.saveLevel) saveLevel();
-    if (Actions.bakeLevel) bakeLevel();
     if (Actions.loadLevel) loadLevel();
     if (Actions.startGame) toggleGameMode();
     if (Actions.nextMode) nextMode();
@@ -917,16 +837,6 @@ function movePlayer(delta) {
         });
         document.dispatchEvent(event);
     };
-    // if (Actions.floorUp || Actions.floorDown) {
-    //     const inc = Actions.floorDown ? -1 : 1;
-    //     const newFloorHeight = Math.max(Math.min((Shared.floorHeight + inc),Shared.FLOORHEIGHTMAX),0);
-    //     const event = new CustomEvent("UIChange", {
-    //         detail: { field: "FloorChange", value: newFloorHeight.toString() },
-    //         bubbles: true // optional, allows event to bubble up
-    //     });
-    //     document.dispatchEvent(event);
-    //     setFloorHeight(newFloorHeight);
-    // }
     if (Actions.showXZ) setWallMode(MODEXZ);
     if (Actions.showYZ) setWallMode(MODEYZ);
     if (Actions.showXY) setWallMode(MODEXY);
@@ -938,11 +848,11 @@ function movePlayer(delta) {
 /*---------------------------------*/
 // editorLoop
 /*---------------------------------*/
-let raycastMeshXZArray = [];
-let raycastMeshYZArray = [];
-let raycastMeshXYArray = [];
+let raycastChunkArray = [];
 let selectObj = null;
-let selectObjDir = "XY";
+let selectInfo = null;
+let prevSelectInfo = null;
+
 function editorLoop() {
 
     if (!Shared.editorState.editorRunning) return;
@@ -961,69 +871,76 @@ function editorLoop() {
         //If eraser mode set raycast against any geometry
         if (eraserMode) {
 
-            //build raycastMeshArray if not built
-            if (raycastMeshXZArray.length === 0) {
-                tileXZGroup.traverse(obj => {if (obj.isMesh) raycastMeshXZArray.push(obj);});
-                tileYZGroup.traverse(obj => {if (obj.isMesh) raycastMeshYZArray.push(obj);});
-                tileXYGroup.traverse(obj => {if (obj.isMesh) raycastMeshXYArray.push(obj);});
-            }
+            raycastChunkArray = Object.values(chunksInScene);
 
             //perform the raycast
             raycaster.setFromCamera(screenCenter, Shared.camera);
             let doesIntersect = false;
-            const hits = [
-                {dir: "XZ", intersects: raycaster.intersectObjects(raycastMeshXZArray, false)},
-                {dir: "YZ", intersects: raycaster.intersectObjects(raycastMeshYZArray, false)},
-                {dir: "XY", intersects: raycaster.intersectObjects(raycastMeshXYArray, false)}
-            ];
+            const hits = raycaster.intersectObjects(raycastChunkArray, false);
 
             let closestHit = null;
-            let hitObjDir = null;
 
-            hits.forEach(h => {
-                if (h.intersects.length > 0) {
-                    const hit = h.intersects[0];
-                    if (!closestHit || hit.distance < closestHit.distance) {
-                        closestHit = hit;
-                        hitObjDir = h.dir;
-                    }
+            for (const hit of hits) {
+                if (!closestHit || hit.distance < closestHit.distance) {
+                    closestHit = hit;
                 }
-            });
+            }
 
             if (closestHit && closestHit.distance < 12) {
                 doesIntersect = true;
             }
 
             if (doesIntersect) {
-                if (closestHit.object != selectObj) {
+
+                let facehit = closestHit.faceIndex;
+                let facetotilerange = closestHit.object?.userData?.facetotilerange;
+                selectInfo = facetotilerange.find(r => facehit >= r.start && facehit <= r.end);
+                
+                if (!prevSelectInfo || prevSelectInfo !== selectInfo ){
+                    // console.log(selectInfo.direction,selectInfo.tilexyz,selectInfo.uvmeshid);
+
                     if (selectObj) {
-                        selectObj.material = Shared.atlasMat;
-                        selectObj.position.y -= Shared.EPSILON;
+                        selectObj.geometry.dispose();
+                        Shared.scene.remove(selectObj);
+                        selectObj = null;
                     }
-                    selectObj = closestHit.object;
-                    selectObjDir = hitObjDir;
-                    selectObj.material = markerremovematerial;
-                    selectObj.position.y += Shared.EPSILON;
 
-                    const ix = Math.floor(closestHit.point.x / Shared.cellSize);
-                    const iy = Math.floor(closestHit.point.y / Shared.cellSize);
-                    const iz = Math.floor(closestHit.point.z / Shared.cellSize);
-                    console.log(
-                        "Intersection found at grid:",
-                        ix, iy, iz,
-                        "| mesh:", selectObj.geometry.userData.meshname,
-                        "| uv:", selectObj.geometry.userData.uvname,
-                        "| distance:", closestHit.distance.toFixed(2)
+                    prevSelectInfo = selectInfo;
+
+                    if (Shared.sceneGeometryDict.has(selectInfo.uvmeshid)) {
+                        selectObj = new THREE.Mesh(Shared.sceneGeometryDict.get(selectInfo.uvmeshid).clone(), markerremovematerial);
+                    } else {
+                        //should not go there normally but support it just in case
+                        const { uvid, meshid } = Shared.decodeID(selectInfo.uvmeshid);
+                        selectObj = generateGeometry(uvid, meshid);
+                    }
+                    const { rot, pos: offset } = RotOffsetPerSlice[selectInfo.direction];
+                    const { x, y, z } = Shared.parseGridKey(selectInfo.tilexyz);
+                    const selectObjPos = new THREE.Vector3();
+                    selectObjPos.set(
+                        offset.x + Shared.cellSize * x,
+                        offset.y + Shared.cellSize * y,
+                        offset.z + Shared.cellSize * z
                     );
+                    const m = new THREE.Matrix4().copy(rot).setPosition(selectObjPos);
+                    // Apply matrix to the mesh's transform
+                    m.decompose(selectObj.position, selectObj.quaternion, selectObj.scale);
+
+                    selectObj.name = "removeMarker";
+                    Shared.scene.add(selectObj);
 
                 }
+
             } else {
-                if (selectObj){
-                    selectObj.material = Shared.atlasMat;
-                    selectObj.position.y -= Shared.EPSILON;
-                    selectObj=null;
+
+                if (selectObj) {
+                    selectObj.geometry.dispose();
+                    Shared.scene.remove(selectObj);
+                    selectObj = null;
                 }
-                console.log("no intersection found");
+                selectInfo = null;
+                prevSelectInfo = null;
+                // console.log("no intersection found");
             }
             
         } else {
@@ -1108,24 +1025,14 @@ function editorLoop() {
                                     //in normal mode adding walls we want to surround the area with walls
                                     //so add them everywhere except "inside" the selection
                                     let todelete = false;
-                                    // if (!eraserMode) {
                                     if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
                                         if (x > 0 && x < scaleX + 1) todelete = true;
                                     } else {
                                         if (x > 0) continue;
                                     }
-                                    // } else {
-                                    //     if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
-                                    //         if (x > 0) continue;
-                                    //     }
-                                    // }
                                     for (let y = 0; y < Shared.wallHeight; y++) {
+                                        if (todelete) continue;
                                         const copytile = markeryz.clone();
-                                        copytile.userData.todelete = todelete;
-                                        // copytile.userData = {
-                                        // todelete: todelete
-                                        // };
-                                        copytile.visible = !todelete;
                                         markergroupyz.add(copytile);
                                         copytile.position.copy(markeryz.position);
                                         copytile.position.x += x;
@@ -1141,25 +1048,15 @@ function editorLoop() {
                             for (let x = 0; x <= scaleX; x++) {
                                 for (let z = 0; z <= scaleZ + 1; z++) {
                                     let todelete = false;
-                                    // if (!eraserMode) {
                                     if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
                                         if (z > 0 && z < scaleZ + 1) todelete = true;
                                     } else {
                                         if (z > 0) continue;
                                     }
-                                    // } else {
-                                    //     if (wallModeSelect != MODEW && wallModeSelect != MODEA) {
-                                    //         if (z > 0) continue;
-                                    //     }
-                                    // }
                                     for (let y = 0; y < Shared.wallHeight; y++) {
+                                        if (todelete) continue;
                                         const copytile = markerxy.clone();
                                         markergroupxy.add(copytile);
-                                        copytile.userData.todelete = todelete;
-                                        // copytile.userData = {
-                                        // todelete: todelete
-                                        // };
-                                        copytile.visible = !todelete;
                                         copytile.position.copy(markerxy.position);
                                         copytile.position.x += x;
                                         copytile.position.z += z;
@@ -1225,10 +1122,14 @@ function editorLoop() {
             Shared.renderer.info.reset(); //it auto resets normally
         }
 
+        //rebuild dirty chunks
+        rebuildDirtyChunks();
+
         // Simulate heavy computation
         if (0) Stats.simulateBlockingWait(200); // 200ms delay
         Stats.updateTextStatsThrottled();
         Stats.stats.end();
+
     }
 
     //clear the onpress/onrelease actions now that they have been sampled 
@@ -1271,9 +1172,6 @@ function createScene() {
     floor.rotation.x = -Math.PI / 2; // face up
     Shared.scene.add(floor);
 
-    Shared.scene.add(tileXZGroup);
-    Shared.scene.add(tileXYGroup);
-    Shared.scene.add(tileYZGroup);
     Shared.scene.add(lightGroup);
     Shared.scene.add(lightHelperGroup);
 
@@ -1300,71 +1198,34 @@ function initializeScene() {
 }
 
 /*---------------------------------*/
-// bakeLevel
-/*---------------------------------*/
-export function bakeLevel() {
-    console.log("BAKELEVEL");
-    bakeGroup(tileXYGroup);
-    bakeGroup(tileYZGroup);
-    bakeGroup(tileXZGroup);
-}
-
-/*---------------------------------*/
-// bakeGroup
-/*---------------------------------*/
-function bakeGroup(group) {
-    const tileGeometries = [];
-    group.children.forEach(plane => {
-        // Clone geometry to avoid modifying original
-        const geom = plane.geometry.clone();
-
-        // Apply world matrix of the mesh to geometry
-        geom.applyMatrix4(plane.matrixWorld);
-
-        tileGeometries.push(geom);
-    });
-    bakedGeometry = mergeBufferGeometries(tileGeometries, false);
-    bakedMesh = new THREE.Mesh(bakedGeometry, Shared.atlasMat);
-    Shared.scene.add(bakedMesh);
-    group.clear();
-}
-
-/*---------------------------------*/
 // resetLevel
 /*---------------------------------*/
 export function resetLevel() {
     //meshes removed from group loses ref and will be garbage collected
-    //however they all share materials and geometry these should not be disposed
-    //and should persist after reset
-    tileXYGroup.clear();
-    tileXZGroup.clear();
-    tileYZGroup.clear();
+    //however they all share materials and geometry be careful about disposing them
+    //check if they should persist after reset
     lightGroup.clear();
     lightHelperGroup.clear();
-    clearGridMap(Shared.gridMapXY);
-    clearGridMap(Shared.gridMapXZ);
-    clearGridMap(Shared.gridMapYZ);
+    deleteAllChunksInScene();
+    undogroup = [];
+    undogroups.length = 0;
+    clearGridMap();
+    clearAllGridMapChunks();
     Shared.gridLight.clear();
     reinitMarker();
-    Shared.resetCamera();
+    // Shared.resetCamera();
     Shared.editorState.renderOneFrame = true;//simply update once the Shared.canvas
-
     Shared.sceneGeometryDict.clear();
-
-    if (bakedMesh) bakedMesh.clear();//temp
 }
 
 /*---------------------------------*/
 // clearGridMap
 // clear nested maps
 /*---------------------------------*/
-function clearGridMap(gridMapv) {
-    for (const innerMap of gridMapv.values()) {
-        if (innerMap instanceof Map) {
-            innerMap.clear(); // Clear the inner Map
-        }
-    }
-    gridMapv.clear(); // Clear the outer Map
+function clearGridMap() {
+    Shared.gridMap.XZ.clear();
+    Shared.gridMap.YZ.clear();
+    Shared.gridMap.XY.clear();
 }
 
 /*---------------------------------*/
@@ -1406,7 +1267,6 @@ export function setAddMode(mode) {
 // loadLevel
 /*---------------------------------*/
 export async function loadLevel() {
-    setEraser(false);
     const file = await new Promise((resolve) => {
         const input = document.createElement("input");
         input.type = "file";
@@ -1482,33 +1342,28 @@ async function loadPlanesIntoScene(jsondata) {
         if (c) bb[key] = hexToBB(c);
     }
 
-    const planetoinfo = {
-        XZ: { g: gridMapXZ, m: markerxz, t: tileXZGroup, o:["y","z","x"] },
-        YZ: { g: gridMapYZ, m: markeryz, t: tileYZGroup, o:["x","z","y"] },
-        XY: { g: gridMapXY, m: markerxy, t: tileXYGroup, o:["z","y","x"] }
+    const planetoorder = {
+        XZ: ["y","z","x"],
+        YZ: ["x","z","y"],
+        XY: ["z","y","x"]
     };
 
-    for (const key of ["XZ", "YZ", "XY"]) {
-        const _hstr = jsondata[key];
-        const _bb = bb["BB" + key];
-        const { g: _gridmap, m: _marker, t: _tilegroup, o: _order } = planetoinfo[key];
+    for (const dir of ["XZ", "YZ", "XY"]) {
+        const _hstr = jsondata[dir];
+        const _bb = bb["BB" + dir];
+        const _order  = planetoorder[dir];
         if (!_hstr || !_bb) continue;
-        loadFlattenedMap(_hstr,_bb,_gridmap,_marker,_tilegroup,sceneGeometryDictArray,_order);
+        loadFlattenedMap(_hstr,_bb,dir,sceneGeometryDictArray,_order);
     }
 
 
+    rebuildDirtyChunks();
+
     return;
 
-
-    //this tile will be cloned during load
-    loadingTile = new THREE.Mesh(
-        markerGeom,
-        Shared.atlasMat,
-    );
-
-    await loadPlaneIntoScene(jsondata, "XY", Shared.gridMapXY, markerxy, tileXYGroup);
-    await loadPlaneIntoScene(jsondata, "XZ", Shared.gridMapXZ, markerxz, tileXZGroup);
-    await loadPlaneIntoScene(jsondata, "YZ", Shared.gridMapYZ, markeryz, tileYZGroup);
+    await loadPlaneIntoScene(jsondata, "XZ", Shared.gridMapXZ, Shared.gridMapChunkXZ, markerxz);
+    await loadPlaneIntoScene(jsondata, "YZ", Shared.gridMapYZ, Shared.gridMapChunkYZ, markeryz);
+    await loadPlaneIntoScene(jsondata, "XY", Shared.gridMapXY, Shared.gridMapChunkXY, markerxy);
     await loadLightIntoScene(jsondata);
 
     updateLoadProgression(1);
@@ -1523,7 +1378,7 @@ async function loadPlanesIntoScene(jsondata) {
 // loadPlaneIntoScene
 /*---------------------------------*/
 let updateInterval = 10;  // update every 2 planes
-async function loadPlaneIntoScene(jsondata, label, grid, marker, group) {
+async function loadPlaneIntoScene(jsondata, label, grid, gridchunk, marker, group) {
     if (label in jsondata) {
         const jsonplanedata = jsondata[label];
 
@@ -1537,7 +1392,7 @@ async function loadPlaneIntoScene(jsondata, label, grid, marker, group) {
                 tile.position.fromArray(data.position);
                 tile.rotation.copy(marker.rotation);
                 // setUVsByName(tile.geometry, geomName);
-                placeTile(tile, grid, group);
+                placeTile(tile, grid, gridchunk, group);
                 loadedElements++;
 
                 //every n planes update UI
@@ -1705,11 +1560,11 @@ function hexToBB(hex) {
 /*---------------------------------*/
 // flattenGridMap
 /*---------------------------------*/
-function flattenGridMap(gridMap, bbox, order) {
+function flattenGridMap(thisGridMap, bbox, order) {
     const { min, max } = bbox;
     const result = [];
 
-    if (gridMap.size === 0) return result;
+    if (thisGridMap.size === 0) return result;
 
     const [a, b, c] = order; // axis order (e.g. ["x","z","y"])
 
@@ -1720,14 +1575,14 @@ function flattenGridMap(gridMap, bbox, order) {
                 coords[a] = ai;
                 coords[b] = bi;
                 coords[c] = ci;
-
                 const key = Shared.getGridKey(coords.x, coords.y, coords.z);
-                const cell = gridMap.get(key);
+
+                const cell = thisGridMap.get(key);
 
                 if (cell) {
                     const cellData = [];
-                    for (const [, mesh] of cell.entries()) {
-                        const index = sceneGeometryDictID[mesh.geometry.userData.uvmeshid];
+                    for (const uvmeshid of Object.values(cell)) {
+                        const index = sceneGeometryDictID[uvmeshid];
                         cellData.push(index);
                     }
                     result.push(cellData);
@@ -1744,16 +1599,16 @@ function flattenGridMap(gridMap, bbox, order) {
 /*---------------------------------*/
 // Specific orientations
 /*---------------------------------*/
-export function flattenXZGridMap(gridMap, bbox) {
-    return flattenGridMap(gridMap, bbox, ["y", "z", "x"]);
+export function flattenXZGridMap(thisGridMap, bbox) {
+    return flattenGridMap(thisGridMap, bbox, ["y", "z", "x"]);
 }
 
-export function flattenYZGridMap(gridMap, bbox) {
-    return flattenGridMap(gridMap, bbox, ["x", "z", "y"]);
+export function flattenYZGridMap(thisGridMap, bbox) {
+    return flattenGridMap(thisGridMap, bbox, ["x", "z", "y"]);
 }
 
-export function flattenXYGridMap(gridMap, bbox) {
-    return flattenGridMap(gridMap, bbox, ["z", "y", "x"]);
+export function flattenXYGridMap(thisGridMap, bbox) {
+    return flattenGridMap(thisGridMap, bbox, ["z", "y", "x"]);
 }
 
 
@@ -1845,13 +1700,13 @@ export function saveLevel() {
     //TODO: convert to bytes then to base64?
 
     //1) calculate bounding box
-    const bbxz = calculateBoundingBox(gridMapXZ);
-    const bbyz = calculateBoundingBox(gridMapYZ);
-    const bbxy = calculateBoundingBox(gridMapXY);
+    const bbxz = calculateBoundingBox(gridMap.XZ);
+    const bbyz = calculateBoundingBox(gridMap.YZ);
+    const bbxy = calculateBoundingBox(gridMap.XY);
 
-    const gridMapXZflattened = flattenXZGridMap(gridMapXZ,bbxz);
-    const gridMapYZflattened = flattenYZGridMap(gridMapYZ,bbyz);
-    const gridMapXYflattened = flattenXYGridMap(gridMapXY,bbxy);
+    const gridMapXZflattened = flattenXZGridMap(gridMap.XZ,bbxz);
+    const gridMapYZflattened = flattenYZGridMap(gridMap.YZ,bbyz);
+    const gridMapXYflattened = flattenXYGridMap(gridMap.XY,bbxy);
 
     const mergedData = {};
     const gridMapXZcompressed = compressFlattenedGrid(gridMapXZflattened);
@@ -1891,32 +1746,6 @@ function groupLights() {
             });
         }
     })
-    return grouped;
-}
-
-/*---------------------------------*/
-// groupPlanesByMaterial
-/*---------------------------------*/
-function groupPlanesByMaterial(group) {
-    const grouped = {};
-
-    group.traverse((child) => {
-        if (
-            child.isMesh &&
-            child.geometry instanceof THREE.PlaneGeometry
-        ) {
-            const geomName = child.geometry?.name || "Unnamed";
-
-            if (!grouped[geomName]) {
-                grouped[geomName] = [];
-            }
-
-            grouped[geomName].push({
-                position: child.position.toArray(),
-            });
-        }
-    });
-
     return grouped;
 }
 
@@ -2006,7 +1835,8 @@ function indexToCoords(flatIndex, sizeX, sizeY, sizeZ, order, bb) {
 // loadFlattenedMap
 // Generic loader
 /*---------------------------------*/
-function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, order = ["x", "z", "y"]) {
+function loadFlattenedMap(hstr, bb, direction, sceneGeometryDictArray, order = ["x", "z", "y"]) {
+    
     const sizeX = bb.max.x - bb.min.x + 1;
     const sizeY = bb.max.y - bb.min.y + 1;
     const sizeZ = bb.max.z - bb.min.z + 1;
@@ -2024,7 +1854,7 @@ function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDic
 
         if (geomIdx !== 0) {
             const geom = sceneGeometryDictArray[geomIdx - 1][1]; // geomidx-1 because 0 is reserved
-            geomArray.push(geom);
+            geomArray.push({meshname : geom.userData.meshname, uvmeshid: geom.userData.uvmeshid });
             if (!last) continue;
         }
 
@@ -2040,33 +1870,17 @@ function loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDic
             const coords = indexToCoords(flatIndex, sizeX, sizeY, sizeZ, order, bb);
 
             geomArray.forEach(geom => {
-                const mesh = new THREE.Mesh(geom, Shared.atlasMat);
-                mesh.position.set(
-                    coords.x * Shared.cellSize + marker.position.x,
-                    coords.y * Shared.cellSize + marker.position.y,
-                    coords.z * Shared.cellSize + marker.position.z
-                );
-                mesh.rotation.copy(marker.rotation);
-                placeTile(mesh, gridmap, tilegroup);
+
+                let wx = coords.x * Shared.cellSize;// + offset.x;
+                let wy = coords.y * Shared.cellSize;// + offset.y;
+                let wz = coords.z * Shared.cellSize;// + offset.z;
+                
+                placeTile(wx,wy,wz,direction,geom.uvmeshid,geom.meshname,false,false);
             });
         }
         geomArray = [];
     }
 }
-/*---------------------------------*/
-// Specific orientations
-/*---------------------------------*/
-// export function loadXZFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
-//     return loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, ["y", "z", "x"]);
-// }
-
-// export function loadYZFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
-//     return loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, ["x", "z", "y"]);
-// }
-
-// export function loadXYFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray) {
-//     return loadFlattenedMap(hstr, bb, gridmap, marker, tilegroup, sceneGeometryDictArray, ["z", "y", "x"]);
-// }
 
 /*---------------------------------*/
 // setWallHeight
@@ -2110,7 +1924,6 @@ export function incFloorHeight(inc){
 }
 export function setFloorHeight(height){
     Shared.setFloorHeight(height);
-    // floor.position.y = height;
     reinitMarker();
 
     // if (height != Shared.FLOORHEIGHTDEFAULT){
@@ -2129,13 +1942,129 @@ function toggleGameMode() {
     Shared.toggleGameMode();
 }
 
-function undo(){
-    console.log("UNDO");
-    let prevEraserMode = eraserMode;
-    setEraser(false);
-    let materialToApply = Shared.atlasMat;
-    if (undogroupxz && undogroupxz.children.length>0) placeGroup(undogroupxz, tileXZGroup, Shared.gridMapXZ, materialToApply);
-    if (undogroupyz && undogroupyz.children.length>0) placeGroup(undogroupyz, tileYZGroup, Shared.gridMapYZ, materialToApply);
-    if (undogroupxy && undogroupxy.children.length>0) placeGroup(undogroupxy, tileXYGroup, Shared.gridMapXY, materialToApply);
-    setEraser(prevEraserMode);
+function undo() {
+    // console.log("UNDO");
+    if (undogroups.length > 0) {
+        const thisundogroup = undogroups.pop();
+        for (const u of thisundogroup) {
+            placeTile(u.wx,u.wy,u.wz,u.direction,u.uvmeshid,u.meshname,u.erase,false);
+        }
+    }
+}
+
+
+function enqueueundo(undoarray){
+    undogroups.push(undoarray);
+    if (undogroups.length > Shared.MAXUNDOACTIONS) undogroups.shift();//clear oldest entry
+}
+
+
+const chunkpos = new THREE.Vector3();
+const chunkmatrix = new THREE.Matrix4();
+
+function rebuildDirtyChunks() {
+    for (const [chunkKey, chunk] of gridMapChunk.entries()) {
+        if (!chunk.dirty) continue;
+
+        // remove old mesh if exists
+        deleteChunkInScene(chunkKey);
+
+        const tileGeometries = [];
+        const facetotilerange = [];
+        let faceOffset = 0;
+
+        for (const direction of ["XZ", "YZ", "XY"]) {
+            const chunkslice = chunk[direction];
+            const { rot, pos: offset } = RotOffsetPerSlice[direction];
+
+            for (const [tilexyz, tilemeshes] of chunkslice.entries()) {
+                const { x, y, z } = Shared.parseGridKey(tilexyz);
+
+                chunkpos.set(
+                    offset.x + Shared.cellSize * x,
+                    offset.y + Shared.cellSize * y,
+                    offset.z + Shared.cellSize * z
+                );
+
+                chunkmatrix.copy(rot).setPosition(chunkpos);
+
+                for (const uvmeshid of Object.values(tilemeshes)) {
+                    let newgeom;
+                    //clone from cache if 
+                    if (Shared.sceneGeometryDict.has(uvmeshid)) {
+                        newgeom = Shared.sceneGeometryDict.get(uvmeshid).clone();
+                    } else {
+                        const { uvid, meshid } = Shared.decodeID(uvmeshid);
+                        newgeom = generateGeometry(uvid, meshid);
+                        Shared.sceneGeometryDict.set(uvmeshid, newgeom.clone());
+                    }
+
+                    newgeom.applyMatrix4(chunkmatrix);
+
+                    // how many triangles does this tile contribute?
+                    const triCount = newgeom.index
+                        ? newgeom.index.count / 3
+                        : newgeom.attributes.position.count / 3;
+
+                    let start=faceOffset;
+                    let end=faceOffset+triCount-1;
+                    facetotilerange.push({start,end,direction,tilexyz,uvmeshid});
+
+                    faceOffset += triCount;
+
+                    tileGeometries.push(newgeom);
+                }
+
+                // cleanup: remove empty tiles
+                if (Object.keys(tilemeshes).length === 0) {
+                    chunkslice.delete(tilexyz);
+                    gridMap[direction].delete(tilexyz);
+                }
+            }
+        }
+
+        if (tileGeometries.length > 0) {
+            const bakedGeometry = mergeBufferGeometries(tileGeometries, false);
+            bakedGeometry.name = "ChunkGeometry_"+chunkKey;
+            const bakedMesh = new THREE.Mesh(bakedGeometry, Shared.atlasMat);
+
+            bakedMesh.userData = {facetotilerange : facetotilerange}; //store mapping
+            chunksInScene[chunkKey] = bakedMesh;
+            bakedMesh.name = "Chunk_"+chunkKey;
+            Shared.chunksGroup.add(bakedMesh);
+        }
+
+        chunk.dirty = false;
+    }
+}
+
+function deleteChunkInScene(chunkKey){
+    if (chunkKey in chunksInScene) {
+        Shared.chunksGroup.remove(chunksInScene[chunkKey]);
+        chunksInScene[chunkKey].geometry.dispose();
+        delete chunksInScene[chunkKey];
+    }
+}
+
+function deleteAllChunksInScene(){
+    for (const chunkKey of gridMapChunk.keys()) {
+        deleteChunkInScene(chunkKey);
+    }
+}
+
+function clearGridMapChunk(chunkKey) {
+    const chunkMap = gridMapChunk.get(chunkKey);
+    if (chunkMap){
+        chunkMap.XZ.clear(); 
+        chunkMap.YZ.clear(); 
+        chunkMap.XY.clear(); 
+    }
+    gridMapChunk.delete(chunkKey);
+}
+
+function clearAllGridMapChunks(){
+    for (const chunkKey of gridMapChunk.keys()) {
+        clearGridMapChunk(chunkKey);
+    }
+    gridMapChunk.clear();
 }
