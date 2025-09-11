@@ -222,18 +222,6 @@ document.addEventListener("UIChange", (e) => {
                 0, 0, matPreviewCanvas.width, matPreviewCanvas.height // destination
             );
             break;
-            // case "MaterialChange":
-        //     // ensure the option exists before setting
-        //     const optionExists = Array.from(matSelect.options).some(
-        //         opt => opt.value === value
-        //     );
-
-        //     if (optionExists) {
-        //         matSelect.value = value;
-        //     } else {
-        //         console.warn("No such material in combobox:", value);
-        //     }
-        //     break;
         case "MeshChange":
             const meshPreviewCanvas = document.getElementById("meshPreviewCanvas");
             const meshctx = meshPreviewCanvas.getContext("2d");
@@ -253,18 +241,6 @@ document.addEventListener("UIChange", (e) => {
                 0, 0, meshPreviewCanvas.width, meshPreviewCanvas.height // destination
             );
             break;      
-        // case "MeshChange":
-        //     // ensure the option exists before setting
-        //     const optionMeshExists = Array.from(meshSelect.options).some(
-        //         opt => opt.value === value
-        //     );
-
-        //     if (optionMeshExists) {
-        //         meshSelect.value = value;
-        //     } else {
-        //         console.warn("No such mesh in combobox:", value);
-        //     }
-        //     break;      
         case "WallChange":
             // ensure the option exists before setting
             const optionWExists = Array.from(wallHeightSelect.options).some(
@@ -362,35 +338,7 @@ function expandHeader(header) {
 // setupEditorUI
 /*-----------------------------------------------------*/
 export function setupEditorUI() {
-    // set material combobox
-    // const matSelect = document.getElementById("matSelect");
-    // fill combo with keys from matDict
 
-    // Object.keys(Shared.atlasUVs).forEach(key => {
-    //     const option = document.createElement("option");
-    //     option.value = key;
-    //     option.textContent = key;  // visible label
-    //     matSelect.appendChild(option);
-    // });
-
-    // set default starting value
-    // if (matSelect.options.length > 0) {
-    //     matSelect.value = Object.keys(Shared.atlasUVs)[0]; // first key as default
-    // }
-
-    // set mesh combobox
-    // const meshSelect = document.getElementById("meshSelect");
-    // fill combo with keys from atlasMesh
-    // Object.keys(Shared.atlasMesh).forEach(key => {
-    //     const option = document.createElement("option");
-    //     option.value = key;
-    //     option.textContent = key;  // visible label
-    //     meshSelect.appendChild(option);
-    // });
-
-    // set mesh combobox
-    // const heightSelect = document.getElementById("heightSelect");
-    // fill combo with keys from atlasMesh
     for (let i = 1; i <= Shared.WALLHEIGHTMAX; i++) {
         const option = document.createElement("option");
         option.value = i;
@@ -486,6 +434,8 @@ function setupPopup(thiscanvas,thisimage,thiscellsize,thisaction) {
         const col = Math.floor(x / thiscellsize);
         const row = Math.floor(y / thiscellsize);
 
+        // console.log(x,y,col,row);
+
         // redraw atlas
         ctx.clearRect(0, 0, thiscanvas.width, thiscanvas.height);
         ctx.drawImage(thisimage, 0, 0);
@@ -499,13 +449,6 @@ function setupPopup(thiscanvas,thisimage,thiscellsize,thisaction) {
 
 }
 
-// const popupbtn = document.getElementById('Item 1');
-// popupbtn.addEventListener('click', () => {
-//     console.log("popup");
-//     closePopup();
-//     Shared.canvas.requestPointerLock()
-// });
-
 /*-----------------------------------------------------*/
 // RADIOS EVENT LISTENERS
 /*-----------------------------------------------------*/
@@ -514,9 +457,6 @@ radios.forEach(radio => {
     if (event.target.checked) {
         Editor.setWallMode(parseInt(event.target.value, 10));
         Shared.editorState.renderOneFrame = true;
-    //   console.log("Radio group name:", event.target.name);  // 👉 "wallOption"
-    //   console.log("Selected option id:", event.target.id);  // 👉 "ceiling", "leftwall" etc
-    //   console.log("Selected option value:", event.target.value); // 👉 "ceiling", "leftwall" etc
     }
   });
 });
