@@ -48,6 +48,12 @@ export const CEILINGHEIGHTMAX = WALLHEIGHTMAX + FLOORHEIGHTMAX;
 export let wallHeight = WALLHEIGHTDEFAULT;
 export let floorHeight = 0;
 
+// undo max capacity
+export const MAXUNDOACTIONS = 10;
+
+// Chunk size
+export const CHUNKSIZE = 8;
+
 // modes
 export const MODEMENU = 0;
 export const MODEEDITOR = 1;
@@ -101,9 +107,13 @@ export const camera   = new THREE.PerspectiveCamera(75, container.clientWidth / 
 export const renderer = new THREE.WebGLRenderer({ canvas:canvas, alpha: true });                                     // important
 
 // Maps tracking tile/lights positions per PLANE
-export const gridMapXZ = new Map();
-export const gridMapYZ = new Map();
-export const gridMapXY = new Map();
+export const gridMapChunk = new Map();
+export const chunksGroup = new THREE.Group(); chunksGroup.name = "chunksGroup";
+
+export const gridMap   = {};
+gridMap.XZ = new Map();
+gridMap.YZ = new Map();
+gridMap.XY = new Map();
 export const gridLight = new Map();
 
 // camera holder: FPS-style rotation system
@@ -122,7 +132,7 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = true;
+    let online = false;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
@@ -380,6 +390,16 @@ export function decodeID(hexStr) {
     const meshid = shifted & meshidMask;
     const uvid   = shifted >> meshidBits;
     return { uvid, meshid };
+}
+
+/*---------------------------------*/
+// getGridChunkKey
+/*---------------------------------*/
+export function getGridChunkKey(x, y = 0, z) {
+    const nx = Math.floor(x/CHUNKSIZE);
+    const ny = Math.floor(y/CHUNKSIZE);
+    const nz = Math.floor(z/CHUNKSIZE);
+    return `${nx},${ny},${nz}`;
 }
 
 /*---------------------------------*/
