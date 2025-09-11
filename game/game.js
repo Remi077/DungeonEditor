@@ -162,13 +162,13 @@ function isColliding(actor, moveVectorv) {
     if (moveVectorv.x < 0) //camera moving towards decreasing X
     {
         k = Shared.getGridKey(posx, 0, posz);
-        if (Shared.gridMapYZ.has(k)) {
+        if (Shared.gridMap.YZ.has(k)) {
             isCollidingX = ((actor.position.x - posx) % csize) <= minDistancefromWalls;
             // colliderX1 = Shared.gridMapYZ.get(k);
         }
     } else {//camera moving towards increasing X
         k = Shared.getGridKey(posx + 1, 0, posz);
-        if (Shared.gridMapYZ.has(k)) {
+        if (Shared.gridMap.YZ.has(k)) {
             isCollidingX = ((actor.position.x - posx) % csize) >= (csize - minDistancefromWalls);
             // colliderX2 = Shared.gridMapYZ.get(k);
         }
@@ -177,13 +177,13 @@ function isColliding(actor, moveVectorv) {
     if (moveVectorv.z < 0) //camera moving towards decreasing Z
     {
         k = Shared.getGridKey(posx, 0, posz);
-        if (Shared.gridMapXY.has(k)) {
+        if (Shared.gridMap.XY.has(k)) {
             isCollidingZ = ((actor.position.z - posz) % csize) <= minDistancefromWalls;
             // colliderZ1 = Shared.gridMapXY.get(k);
         }
     } else {//camera moving towards increasing Z
         k = Shared.getGridKey(posx, 0, posz + 1);
-        if (Shared.gridMapXY.has(k)) {
+        if (Shared.gridMap.XY.has(k)) {
             isCollidingZ = ((actor.position.z - posz) % csize) >= (csize - minDistancefromWalls);
             // colliderZ2 = Shared.gridMapXY.get(k);
         }
