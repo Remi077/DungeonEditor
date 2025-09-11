@@ -65,6 +65,7 @@ function updateTextStats() {
     //floor and masked markers are not counted
     visibleMeshCount = countVisibleMeshes(Shared.scene);
     document.getElementById('meshCount').textContent = meshCount;
+    document.getElementById('chunkCount').textContent = Shared.chunksGroup.children.length;
     document.getElementById('visibleMeshCount').textContent = visibleMeshCount;
     document.getElementById('lightCount').textContent = lightCount;
 
