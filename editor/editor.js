@@ -228,7 +228,10 @@ export function setupEditor() {
             side: THREE.DoubleSide,
             //note: a transparent plane adds 2 draw calls per plane instead of 1.
             transparent: false,
-            opacity: 0.5
+            // opacity: 0.5,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
         });
     markeryzmaterial = markerxzmaterial.clone();
     markerxymaterial = markerxzmaterial.clone();
@@ -715,7 +718,7 @@ function reinitMarker() {
     //RED
     markergroupxz.clear();
     markergroupxz.add(markerxz.clone());
-    markergroupxz.position.set(selectX, Shared.floorHeight+Shared.EPSILON, selectZ);
+    markergroupxz.position.set(selectX, Shared.floorHeight, selectZ);
 
     //GREEN
     markergroupyz.clear();
@@ -732,7 +735,7 @@ function reinitMarker() {
         t.position.y += y;
         markergroupyz.add(t);
     }
-    markergroupyz.position.set(selectX, Shared.floorHeight+Shared.EPSILON, selectZ);
+    markergroupyz.position.set(selectX, Shared.floorHeight, selectZ);
 
     //BLUE
     markergroupxy.clear();
@@ -742,7 +745,7 @@ function reinitMarker() {
         t.position.y += y;
         markergroupxy.add(t);
     }
-    markergroupxy.position.set(selectX, Shared.floorHeight+Shared.EPSILON, selectZ);
+    markergroupxy.position.set(selectX, Shared.floorHeight, selectZ);
 
     //reinit bbox
     boxselectModeendX = boxselectModestartX;
@@ -983,9 +986,9 @@ function editorLoop() {
 
                     if (!Shared.editorState.mouseIsDown) {
                         // slightly above floor to prevent z-fighting
-                        markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
-                        markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
-                        markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, selectZ * Shared.cellSize);
+                        markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
+                        markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
+                        markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
                     } else {
 
                         //UPDATE SELECTION BBOX
@@ -993,9 +996,10 @@ function editorLoop() {
                         boxselectModeendZ = selectZ;
 
                         //UPDATE MARKER POSITION
-                        markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                        markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                        markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize) + Shared.EPSILON, Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                        markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                        markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                        markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+
 
                         //CLEAR MARKER MESHES
                         markergroupxz.clear();
