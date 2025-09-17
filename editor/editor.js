@@ -11,7 +11,7 @@ import {mergeBufferGeometries} from '../utils/BufferGeometryUtils.js';
 // addition modes
 export const ADDPLANEMODE = 0;
 export const ADDLIGHTMODE = 1;
-export const ADDMESHMODE = 2;
+export const ADDRANDMODE = 2;
 export const NUMADDMODES = 3;
 
 // tile addition modes
@@ -58,8 +58,8 @@ let boxselectModestartZ = 0;
 let boxselectModeendX   = 0;
 let boxselectModeendZ   = 0;
 let prevWallModeSelect  = MODEA;
-let wallModeSelect      = MODEXZ;  //0: xz 1:yz 2:xy 3: walls 4: all
-let currentAddMode = ADDPLANEMODE;
+let wallModeSelect      = MODEXZ;        //0: xz 1:yz 2:xy 3: walls 4: all
+let currentAddMode      = ADDPLANEMODE;
 
 // marker variables
 let markerxz;
@@ -83,28 +83,41 @@ let showMarkerXZ = true;
 let showMarkerYZ = false;
 let showMarkerXY = false;
 
+//eraser mode
 let eraserMode     = false;
+
+//light marker helper
+let lightMarker;
+let lightMarkerHelper;
+let lightMarkerGroup;
 
 // holds baked chunk geometry
 let chunksInScene = {};
+
+// maze variables
+let mazeWallUvMeshId = "0000";
+let mazeFloorUvMeshId = "0000";
 
 /*-----------------------------------------------------*/
 // EDITOR ACTIONS TO KEY MAPPING AND REVERSE
 /*-----------------------------------------------------*/
 export let ActionToKeyMap = {
-    moveCamUp   : { key: 'ShiftLeft' },
-    moveCamDown : { key: 'Space' },
-    moveCamRight: { key: 'KeyD' },
-    moveCamLeft : { key: 'KeyA' },
-    moveCamFront: { key: 'KeyW' },
-    moveCamBack : { key: 'KeyS' },
-    // setAddPlaneMode: { key: 'Digit1', OnPress: true },
-    // setAddLightMode: { key: 'Digit2', OnPress: true },
-    // setAddMeshMode : { key: 'Digit3', OnPress: true },
-    pause       : { key: 'KeyP', OnRelease: true },  //triggered once only at release
-    prevMaterial: { key: 'KeyQ', OnPress: true },
-    nextMaterial: { key: 'KeyE', OnPress: true },
+    moveCamUp      : { key: 'ShiftLeft' },
+    moveCamDown    : { key: 'Space' },
+    moveCamRight   : { key: 'KeyD' },
+    moveCamLeft    : { key: 'KeyA' },
+    moveCamFront   : { key: 'KeyW' },
+    moveCamBack    : { key: 'KeyS' },
+    setAddPlaneMode: { key: 'Digit1', OnPress: true },
+    setAddLightMode: { key: 'Digit2', OnPress: true },
+    setAddRandMode : { key: 'Digit3', OnPress: true },
+    pause          : { key: 'KeyP', OnRelease: true },   //triggered once only at release
+      // prevMaterial: { key: 'KeyQ', OnPress: true },
+      // nextMaterial: { key: 'KeyE', OnPress: true },
+    nextWall    : { key: 'KeyQ', OnPress: true },
+    prevWall    : { key: 'KeyE', OnPress: true },
     toggleEraser: { key: 'KeyR', OnPress: true },
+    selectMesh  : { key: 'Tab', OnPress: true },
     nextMesh    : { key: 'KeyC', OnPress: true },
     prevMesh    : { key: 'KeyZ', OnPress: true },
     saveLevel   : { key: 'KeyT', OnPress: true },
@@ -113,11 +126,11 @@ export let ActionToKeyMap = {
     nextMode    : { key: 'PageUp', OnPress: true },
     prevMode    : { key: 'PageDown', OnPress: true },
     undo        : { key: 'Ctrl+KeyZ', OnPress: true },
-    showXZ      : { key: 'Digit1', OnPress: true },
-    showYZ      : { key: 'Digit2', OnPress: true },
-    showXY      : { key: 'Digit3', OnPress: true },
-    showW       : { key: 'Digit4', OnPress: true },
-    showA       : { key: 'Digit5', OnPress: true },
+      // showXZ      : { key: 'Digit1', OnPress: true },
+      // showYZ      : { key: 'Digit2', OnPress: true },
+      // showXY      : { key: 'Digit3', OnPress: true },
+      // showW       : { key: 'Digit4', OnPress: true },
+      // showA       : { key: 'Digit5', OnPress: true },
 };
 
 /*-----------------------------------------------------*/
@@ -205,10 +218,6 @@ export function setupEditor() {
 
     Shared.sceneGeometryDict.clear();
 
-    //start in add plane mode
-    setAddMode(ADDPLANEMODE);
-    setWallMode(MODEA);
-
     /*-----------------------------*/
     // MARKERS SETUP
     // In Three.js, the coordinate system is a right-handed Cartesian system, and the axes are organized like this:
@@ -290,8 +299,38 @@ export function setupEditor() {
     Shared.scene.add(markergroupyz);
     Shared.scene.add(markergroupxy);
 
+    //light marker helper
+    const { light: lightMarkerv, helper: lightMarkerHelperv } = Shared.createLight(new THREE.Vector3(0 + 0.5, 0 + 0.5, 0 + 0.5));
+    lightMarker=lightMarkerv; 
+    // lightMarkerHelper=lightMarkerHelperv;
+    const lightmarkerGeom = new THREE.SphereGeometry(0.1, 8, 8);
+    const lightmarkerMat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+    lightMarkerHelper = new THREE.Mesh(lightmarkerGeom, lightmarkerMat);
+    lightMarkerHelper.position.set(0.5, 0.5, 0.5);   // local offset zero
+    lightMarkerGroup= new THREE.Group(); lightMarkerGroup.name = "lightMarkerGroup";
+    lightMarkerGroup.add(lightMarker);
+    lightMarkerGroup.add(lightMarkerHelper);
+    lightMarkerGroup.position.set(0,0,0);
+
+    // lightMarker.add(lightMarkerHelper);//light follows helper
+    // lightMarkerHelper.updateMatrixWorld();     // force recalculation
+    // lightMarker.visible = false;//both becomes invisible
+    // lightMarkerHelper.visible = false;//both becomes invisible
+    lightMarkerGroup.visible = false;
+    Shared.scene.add(lightMarkerGroup);
+    // Shared.scene.add(lightMarkerHelper);
+    
     //chunks group
     Shared.scene.add(Shared.chunksGroup);
+
+    //start in add plane mode
+    setAddMode(ADDPLANEMODE);
+    setWallMode(MODEA);
+    setMaterial(0);
+    // setMeshFromMeshName("Plane");
+    setMeshFromMeshindex(0);
+    setMazeWallMaterial(0);
+    setMazeFloorMaterial(0);
 
     // create the scene
     createScene();
@@ -310,15 +349,28 @@ export function setupEditor() {
 export function startEditorLoop() {
     Shared.editorState.editorRunning = true;
     editorId = requestAnimationFrame(editorLoop);
+
+    //markers
     reinitMarker();
-    markeryzmaterial.visible     = true;
-    markerxzmaterial.visible     = true;
-    markerxymaterial.visible     = true;
-    markerremovematerial.visible = true;
+    markergroupxz.visible = showMarkerXZ;
+    markergroupyz.visible = showMarkerYZ;
+    markergroupxy.visible = showMarkerXY;    
+    // markeryzmaterial.visible     = true;
+    // markerxzmaterial.visible     = true;
+    // markerxymaterial.visible     = true;
+    // markerremovematerial.visible = true;
+
+    //grid
     grid.visible                 = true;
     // gridtwo.visible              = false;
     axes.visible                 = true;
-    lightHelperGroup.visible     = true;
+
+    //lights
+    lightHelperGroup.visible     = false;
+    Shared.ambientLight.color.set(Shared.AMBIENTLIGHTEDITCOLOR);
+
+    //back to addmode
+    setAddMode(ADDPLANEMODE);//by default
 }
 
 /*---------------------------------*/
@@ -329,16 +381,25 @@ export function stopEditorLoop() {
 
     cancelAnimationFrame(editorId);
 
-    reinitMarker();
+    //markers
+    setEraser(false);
+    // reinitMarker();
+    markergroupxz.visible = false;
+    markergroupyz.visible = false;
+    markergroupxy.visible = false;
+    // markeryzmaterial.visible     = false;
+    // markerxzmaterial.visible     = false;
+    // markerxymaterial.visible     = false;
+    // markerremovematerial.visible = false;
 
-    markeryzmaterial.visible     = false;
-    markerxzmaterial.visible     = false;
-    markerxymaterial.visible     = false;
-    markerremovematerial.visible = false;
+    //grid
     grid.visible                 = false;
     // gridtwo.visible              = false;
     axes.visible                 = false;
+
+    //lights
     lightHelperGroup.visible     = false;
+    lightMarkerGroup.visible     = false;
 }
 
 /*---------------------------------*/
@@ -384,7 +445,7 @@ function prevWall() {
 }
 
 function toggleWall(increment = 1) {
-    newWallModeSelect = (((wallModeSelect + increment) % NUMMODES) + NUMMODES) % NUMMODES;
+    let newWallModeSelect = (((wallModeSelect + increment) % NUMMODES) + NUMMODES) % NUMMODES;
     setWallMode(newWallModeSelect);
 }
 
@@ -451,6 +512,28 @@ export function setMaterial(uvIndex){
     document.dispatchEvent(event);
 }
 
+export function setMazeWallMaterial(uvIndex){
+    const meshid = Shared.atlasMeshidx["Plane"];
+    mazeWallUvMeshId = Shared.encodeID(uvIndex,meshid);
+    //notify the UI back to update the selected combobox
+    const event = new CustomEvent("UIChange", {
+        detail: { field: "MazeWallChange", value: uvIndex },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(event);
+}
+
+export function setMazeFloorMaterial(uvIndex){
+    const meshid = Shared.atlasMeshidx["Plane"];
+    mazeFloorUvMeshId = Shared.encodeID(uvIndex,meshid);
+    //notify the UI back to update the selected combobox
+    const event = new CustomEvent("UIChange", {
+        detail: { field: "MazeFloorChange", value: uvIndex },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(event);
+}
+
 /*---------------------------------*/
 // setMesh
 /*---------------------------------*/
@@ -468,9 +551,20 @@ function toggleMesh(increment){
 
 export function setMeshFromMeshindex(meshindex){
     currentMeshIndex = meshindex;
-    let currentName = Shared.atlasMeshArray[meshindex][0];
+    // let currentName = Shared.atlasMeshArray[meshindex][0];
     setMesh(currentUVIndex,meshindex);
     //notify the UI back to update the selected combobox
+    const event = new CustomEvent("UIChange", {
+        detail: { field: "MeshChange", value: meshindex },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(event);
+}
+
+export function setMeshFromMeshName(meshname){
+    const meshindex = Shared.atlasMeshidx[meshname];
+    currentMeshIndex = meshindex;
+    setMesh(currentUVIndex,meshindex);
     const event = new CustomEvent("UIChange", {
         detail: { field: "MeshChange", value: meshindex },
         bubbles: true // optional, allows event to bubble up
@@ -575,11 +669,17 @@ function placeTile(wx,wy,wz,direction,uvmeshid,meshname,erase=false,undoable=tru
     let chunk = gridMapChunk.get(chunkkey);
 
     // Eraser mode
-    if (tile && meshname in tile) {
+    if (tile && (meshname in tile || meshname === "")) {
         //if a tile is replaced, do not mark as erase and record the erased tile instead
         undoitem.uvmeshid = tile[meshname];
         undoitem.erase = false;
-        delete tile[meshname];
+        if (meshname === ""){
+            //if no name given delete any mesh found here
+            // tile = {};
+            Object.keys(tile).forEach(k => delete tile[k]);
+        } else {
+            delete tile[meshname];
+        }
         if (chunk) chunk.dirty = true;
         //handle the mapping update (deletion) in rebuildDirtyChunk
     }
@@ -621,35 +721,43 @@ export function onMouseClick(event) {
 
     if (event.button == 0) {
 
-        if (eraserMode) { 
-            //TOCOMPLETE
-        } else {
-            if (!selectValid) return;
+        Shared.editorState.hasClicked  = true;
+        Shared.editorState.mouseIsDown = true;
 
-            if (currentAddMode == ADDLIGHTMODE) {
+        switch (currentAddMode) {
+
+            case ADDPLANEMODE:
+
+                if (eraserMode) {
+                    //TOCOMPLETE
+                } else {
+
+                    if (!selectValid) return;
+
+                    markergroupxz.visible = false;
+                    markergroupxy.visible = false;
+                    markergroupyz.visible = false;
+
+                    // if (event.shiftKey) { // console.log("Shift + Click detected");
+                    boxselectModestartX = selectX;
+                    boxselectModestartZ = selectZ;
+                    boxselectModeendX   = selectX;
+                    boxselectModeendZ   = selectZ;
+                }
+                break;
+
+            case ADDLIGHTMODE:
+
                 let { light: newlight, helper: newlighthelper } = Shared.createLight(new THREE.Vector3(selectX + 0.5, Shared.floorHeight + 0.5, selectZ + 0.5));
                 placeLight(newlight, newlighthelper, Shared.gridLight, lightGroup, lightHelperGroup);
-                return;
-            }
-
-            Shared.editorState.hasClicked = true;
-
-            markergroupxz.visible = false;
-            markergroupxy.visible = false;
-            markergroupyz.visible = false;
-
-            // if (event.shiftKey) { // console.log("Shift + Click detected");
-            boxselectModestartX = selectX;
-            boxselectModestartZ = selectZ;
-            boxselectModeendX = selectX;
-            boxselectModeendZ = selectZ;
+                break;
         }
-        Shared.editorState.mouseIsDown = true;
+
     }
 
     //right click
     // if (event.button == 2){
-        // setEraser(true);//eraser on right click
+    // setEraser(true);//eraser on right click
     // }
 
 }
@@ -661,53 +769,76 @@ export function onMouseUp(event) {
 
     if (!Shared.editorState.editorRunning) return;
 
-
     if (event.button == 0) {
 
         Shared.editorState.mouseIsDown = false;
 
-        if (eraserMode) {
-            if(selectObj && selectInfo){
+        switch (currentAddMode) {
 
-                placeTileFromMesh(selectObj, selectInfo.direction, true);
+            case ADDPLANEMODE:
 
-                enqueueundo(undogroup);
-                undogroup = [];
+                if (eraserMode) {
+                    if (selectObj && selectInfo) {
 
-                if (selectObj) {
-                    selectObj.geometry.dispose();
-                    Shared.scene.remove(selectObj);
-                    selectObj = null;
+                        placeTileFromMesh(selectObj, selectInfo.direction, true);
+
+                        enqueueundo(undogroup);
+                        undogroup = [];
+
+                        if (selectObj) {
+                            selectObj.geometry.dispose();
+                            Shared.scene.remove(selectObj);
+                            selectObj = null;
+                        }
+                        selectInfo = null;
+                        selectObj = null;
+
+                    }
+                } else {
+
+                    if (!selectValid) {
+                        reinitMarker();
+                        return;
+                    }
+
+                    //find material
+                    if (showMarkerXZ) placeGroup(markergroupxz, "XZ");
+                    if (showMarkerYZ) placeGroup(markergroupyz, "YZ");
+                    if (showMarkerXY) placeGroup(markergroupxy, "XY");
+
+                    enqueueundo(undogroup);
+                    undogroup = [];
+
+                    boxselectModeendX = boxselectModestartX;
+                    boxselectModeendZ = boxselectModestartZ;
                 }
-                selectInfo = null;
-                selectObj = null;
 
-            }
-        } else {
-            if (currentAddMode != ADDPLANEMODE) {
-                return;
-            }
-
-            if (!selectValid) {
+                //reinitialize marker
                 reinitMarker();
+                break;
+
+            default:
                 return;
-            }
-
-            //find material
-            if (showMarkerXZ) placeGroup(markergroupxz, "XZ");
-            if (showMarkerYZ) placeGroup(markergroupyz, "YZ");
-            if (showMarkerXY) placeGroup(markergroupxy, "XY");
-
-            enqueueundo(undogroup);
-            undogroup = [];
-
-            boxselectModeendX = boxselectModestartX;
-            boxselectModeendZ = boxselectModestartZ;
         }
+    } else if (event.button == 2) {
+        let popup;
+        if (event.altKey) {
+            openPopup(Shared.meshpopup)
+        } else {
+            openPopup(Shared.matpopup)
+        }
+
     }
 
-    //reinitialize marker
-    reinitMarker();
+}
+
+function openPopup(popup){
+    //update the UI
+    const cevent = new CustomEvent("UIChange", {
+        detail: { field: "openPopup", value: popup },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(cevent);
 }
 
 /*---------------------------------*/
@@ -795,9 +926,9 @@ export function onMouseWheel(event) {
 }
 
 /*---------------------------------*/
-// pauseAndDebug
+// executeUnpausableActions
 /*---------------------------------*/
-function pauseAndDebug(delta) {
+function executeUnpausableActions(delta) {
     // Create a local movement vector based on input
     const moveVector = new THREE.Vector3();
     const moveCam = Shared.moveSpeed * delta;
@@ -817,35 +948,52 @@ function pauseAndDebug(delta) {
 }
 
 /*---------------------------------*/
-// movePlayer
+// executePausableActions
 /*---------------------------------*/
-function movePlayer(delta) {
+function executePausableActions(delta) {
 
-    if (Actions.nextMaterial) nextMaterial();
-    if (Actions.prevMaterial) prevMaterial();
-    if (Actions.toggleEraser) toggleEraser();
-    if (Actions.nextMesh) nextMesh();
-    if (Actions.prevMesh) prevMesh();
-    if (Actions.saveLevel) saveLevel();
-    if (Actions.loadLevel) loadLevel();
-    if (Actions.startGame) toggleGameMode();
-    if (Actions.nextMode) nextMode();
-    if (Actions.prevMode) prevMode();
-    if (Actions.undo) undo();
-    // if (Actions.setAddPlaneMode) {
-    if (Actions.nextMode || Actions.prevMode) {
+    //always possible whatever the add mode
+    if (Actions.setAddPlaneMode) {setAddMode(ADDPLANEMODE)};
+    if (Actions.setAddLightMode) {setAddMode(ADDLIGHTMODE)};
+    if (Actions.setAddRandMode) {setAddMode(ADDRANDMODE)};
+    if (Actions.setAddPlaneMode ||
+        Actions.setAddLightMode ||
+        Actions.setAddRandMode
+    ) {
         const event = new CustomEvent("UIChange", {
             detail: { field: "modeChange", value: currentAddMode },
             bubbles: true // optional, allows event to bubble up
         });
         document.dispatchEvent(event);
     };
-    if (Actions.showXZ) setWallMode(MODEXZ);
-    if (Actions.showYZ) setWallMode(MODEYZ);
-    if (Actions.showXY) setWallMode(MODEXY);
-    if (Actions.showW) setWallMode(MODEW);
-    if (Actions.showA) setWallMode(MODEA);
+    // if (Actions.nextMode) nextMode();
+    // if (Actions.prevMode) prevMode();    
 
+    //only in addplane mode
+    if (currentAddMode == ADDPLANEMODE) {
+        if (Actions.nextMaterial) nextMaterial();
+        if (Actions.prevMaterial) prevMaterial();
+        if (Actions.nextWall) nextWall();
+        if (Actions.prevWall) prevWall();
+        if (Actions.toggleEraser) toggleEraser();
+        if (Actions.selectMesh) openPopup(Shared.meshpopup);
+        if (Actions.nextMesh) nextMesh();
+        if (Actions.prevMesh) prevMesh();
+        if (Actions.saveLevel) saveLevel();
+        if (Actions.loadLevel) loadLevel();
+        // if (Actions.startGame) toggleGameMode();
+        if (Actions.undo) undo();
+        if (Actions.showXZ) setWallMode(MODEXZ);
+        if (Actions.showYZ) setWallMode(MODEYZ);
+        if (Actions.showXY) setWallMode(MODEXY);
+        if (Actions.showW) setWallMode(MODEW);
+        if (Actions.showA) setWallMode(MODEA);
+    }
+
+}
+
+function executeLastActionsBeforeLoop(){
+    if (Actions.startGame) toggleGameMode();
 }
 
 /*---------------------------------*/
@@ -865,266 +1013,42 @@ function editorLoop() {
 
     const deltaTime = Shared.clock.getDelta(); // Time elapsed since last frame
     GameHUD.drawHUD();
-    pauseAndDebug(deltaTime);
+    executeUnpausableActions(deltaTime);
 
     if (!Shared.editorState.pause || Shared.editorState.renderOneFrame) {
+
+        //clear that flag
         Shared.editorState.renderOneFrame = false;
-        movePlayer(deltaTime);
 
-        //If eraser mode set raycast against any geometry
-        if (eraserMode) {
+        //sample and execute the actions available when not in pause
+        executePausableActions(deltaTime);
 
-            raycastChunkArray = Object.values(chunksInScene);
+        switch (currentAddMode) {
+            case ADDPLANEMODE:
+                if (eraserMode) {
+                    
+                    //highlight the mesh to delete from a given selected chunk
+                    highlightMeshToDelete();
+                    
+                } else {
 
-            //perform the raycast
-            raycaster.setFromCamera(screenCenter, Shared.camera);
-            let doesIntersect = false;
-            const hits = raycaster.intersectObjects(raycastChunkArray, false);
-
-            let closestHit = null;
-
-            for (const hit of hits) {
-                if (!closestHit || hit.distance < closestHit.distance) {
-                    closestHit = hit;
-                }
-            }
-
-            if (closestHit && closestHit.distance < 12) {
-                doesIntersect = true;
-            }
-
-            if (doesIntersect) {
-
-                let facehit = closestHit.faceIndex;
-                let facetotilerange = closestHit.object?.userData?.facetotilerange;
-                selectInfo = facetotilerange.find(r => facehit >= r.start && facehit <= r.end);
-                
-                if (!prevSelectInfo || prevSelectInfo !== selectInfo ){
-                    // console.log(selectInfo.direction,selectInfo.tilexyz,selectInfo.uvmeshid);
-
-                    if (selectObj) {
-                        selectObj.geometry.dispose();
-                        Shared.scene.remove(selectObj);
-                        selectObj = null;
-                    }
-
-                    prevSelectInfo = selectInfo;
-
-                    if (Shared.sceneGeometryDict.has(selectInfo.uvmeshid)) {
-                        selectObj = new THREE.Mesh(Shared.sceneGeometryDict.get(selectInfo.uvmeshid).clone(), markerremovematerial);
-                    } else {
-                        //should not go there normally but support it just in case
-                        const { uvid, meshid } = Shared.decodeID(selectInfo.uvmeshid);
-                        selectObj = generateGeometry(uvid, meshid);
-                    }
-                    const { rot, pos: offset } = RotOffsetPerSlice[selectInfo.direction];
-                    const { x, y, z } = Shared.parseGridKey(selectInfo.tilexyz);
-                    const selectObjPos = new THREE.Vector3();
-                    selectObjPos.set(
-                        offset.x + Shared.cellSize * x,
-                        offset.y + Shared.cellSize * y,
-                        offset.z + Shared.cellSize * z
-                    );
-                    const m = new THREE.Matrix4().copy(rot).setPosition(selectObjPos);
-                    // Apply matrix to the mesh's transform
-                    m.decompose(selectObj.position, selectObj.quaternion, selectObj.scale);
-
-                    selectObj.name = "removeMarker";
-                    Shared.scene.add(selectObj);
+                    //raycast against the floor
+                    floorRaycast();
+                    //maintain a group of marker tiles that show the current add selection
+                    updateMarker();
 
                 }
-
-            } else {
-
-                if (selectObj) {
-                    selectObj.geometry.dispose();
-                    Shared.scene.remove(selectObj);
-                    selectObj = null;
-                }
-                selectInfo = null;
-                prevSelectInfo = null;
-                // console.log("no intersection found");
-            }
-            
-        } else {
-
-            //FLOOR RAYCAST TEST
-            raycaster.setFromCamera(screenCenter, Shared.camera);
-            const intersects = raycaster.intersectObject(floor);
-
-            selectValid = false;
-            markergroupxz.visible = false;
-            markergroupyz.visible = false;
-            markergroupxy.visible = false;
-
-            let doesIntersect = false;
-            if (intersects.length > 0) {
-                doesIntersect = intersects[0].distance < 12;
-            }
-
-            if (doesIntersect) {
-                const point = intersects[0].point;
-                // console.log("intersectpoint",point);
-                selectValid = true;
-                markergroupxz.visible = showMarkerXZ;
-                markergroupyz.visible = showMarkerYZ;
-                markergroupxy.visible = showMarkerXY;
-                // Convert world position to grid cell
-                selectX = Math.floor(point.x / Shared.cellSize);
-                selectY = Shared.floorHeight;
-                selectZ = Math.floor(point.z / Shared.cellSize);
-
-                //UPDATE ONLY WHEN NEW CELL SELECTED
-                if (
-                    (selectX != prevSelectX) ||
-                    (selectZ != prevSelectZ) ||
-                    wallModeSelect != prevWallModeSelect ||
-                    Shared.editorState.hasClicked
-                ) {
-                    Shared.editorState.hasClicked = false;
-                    // console.log("newpoint");
-
-                    if (!Shared.editorState.mouseIsDown) {
-                        // slightly above floor to prevent z-fighting
-                        markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
-                        markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
-                        markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
-                    } else {
-
-                        //UPDATE SELECTION BBOX
-                        boxselectModeendX = selectX;
-                        boxselectModeendZ = selectZ;
-
-                        //UPDATE MARKER POSITION
-                        markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                        markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-                        markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-
-
-                        //CLEAR MARKER MESHES
-                        markergroupxz.clear();
-                        markergroupyz.clear();
-                        markergroupxy.clear();
-
-                        //CALCULATE MARKER SIZE
-                        let scaleX = Math.abs(boxselectModeendX - boxselectModestartX);
-                        let scaleZ = Math.abs(boxselectModeendZ - boxselectModestartZ);
-
-                        //GENERATE MARKER MESHES
-                        //RED
-                        if (showMarkerXZ) {
-                            for (let x = 0; x <= scaleX; x++) {
-                                for (let z = 0; z <= scaleZ; z++) {
-                                    const copytile = markerxz.clone();
-                                    markergroupxz.add(copytile);
-                                    copytile.position.set(x + Shared.cellSize / 2, 0, z + Shared.cellSize / 2);
-                                }
-                            }
-                        }
-
-                        //GREEN
-                        if (showMarkerYZ) {
-                            for (let x = 0; x <= scaleX + 1; x++) {
-                                for (let z = 0; z <= scaleZ; z++) {
-                                    //in normal mode adding walls we want to surround the area with walls
-                                    //so add them everywhere except "inside" the selection
-                                    let todelete = false;
-                                    if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
-                                        if (x > 0 && x < scaleX + 1) todelete = true;
-                                    } else {
-                                        if (x > 0) continue;
-                                    }
-                                    for (let y = 0; y < Shared.wallHeight; y++) {
-                                        if (todelete) continue;
-                                        const copytile = markeryz.clone();
-                                        markergroupyz.add(copytile);
-                                        copytile.position.copy(markeryz.position);
-                                        copytile.position.x += x;
-                                        copytile.position.z += z;
-                                        copytile.position.y += y;
-                                    }
-                                }
-                            }
-                        }
-
-                        //BLUE
-                        if (showMarkerXY) {
-                            for (let x = 0; x <= scaleX; x++) {
-                                for (let z = 0; z <= scaleZ + 1; z++) {
-                                    let todelete = false;
-                                    if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
-                                        if (z > 0 && z < scaleZ + 1) todelete = true;
-                                    } else {
-                                        if (z > 0) continue;
-                                    }
-                                    for (let y = 0; y < Shared.wallHeight; y++) {
-                                        if (todelete) continue;
-                                        const copytile = markerxy.clone();
-                                        markergroupxy.add(copytile);
-                                        copytile.position.copy(markerxy.position);
-                                        copytile.position.x += x;
-                                        copytile.position.z += z;
-                                        copytile.position.y += y;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                //KEEP TRACK OF LAST SELECTED CELL
-                prevSelectX = selectX;
-                prevSelectZ = selectZ;
-                prevWallModeSelect = wallModeSelect;
-
-            } else {
-
-                //NO CELL SELECTED, REINIT MARKER AND BBOX
-                Shared.editorState.mouseIsDown = false;
-                //reinit marker only when it was valid before and
-                //it is not anymore
-                if (prevSelectValid)
-                    reinitMarker();
-
-            }
-
-            prevSelectValid = selectValid;
-
-        }
+                break;
+            case ADDLIGHTMODE:
+                    floorRaycast();
+                    updateLightMarker();
+                break;
+            default:
+                break;
+    }
 
         //RENDER GIZMO HELPER in BOTTOM LEFT CORNER
-        if (1) {
-            // 1. Render main scene
-            Shared.renderer.setViewport(0, 0, Shared.container.clientWidth, Shared.container.clientHeight);
-            Shared.renderer.clear();
-            Shared.renderer.render(Shared.scene, Shared.camera);
-            // console.log("draw calls main scene", renderer.info.render.calls);
-            Stats.renderStats.drawcalls = Shared.renderer.info.render.calls;
-
-            // 2. Render mini viewport (e.g., bottom-left corner)
-            const vpSize = 100;
-            Shared.renderer.setViewport(10, 10, vpSize, vpSize);
-            Shared.renderer.setScissor(10, 10, vpSize, vpSize);
-            Shared.renderer.setScissorTest(true);
-            Shared.renderer.clearDepth();
-            Shared.renderer.render(axesScene, axesCamera);
-            // console.log("draw calls mini viewport", renderer.info.render.calls);
-            Stats.renderStats.drawcalls += Shared.renderer.info.render.calls;
-
-            // 3. Reset to full Shared.canvas
-            Shared.renderer.setScissorTest(false);
-
-            //To sync the mini gizmo with your main camera orientation:
-            const worldQuat = new THREE.Quaternion();
-            Shared.camera.getWorldQuaternion(worldQuat);
-            axesHelper.quaternion.copy(worldQuat).invert();
-
-        } else {
-            Shared.renderer.render(Shared.scene, Shared.camera);
-            // console.log("draw calls main scene", renderer.info.render.calls);
-            Stats.renderStats.drawcalls = Shared.renderer.info.render.calls;
-            Shared.renderer.info.reset(); //it auto resets normally
-        }
+        render_gizmo();
 
         //rebuild dirty chunks
         rebuildDirtyChunks();
@@ -1136,12 +1060,302 @@ function editorLoop() {
 
     }
 
+    executeLastActionsBeforeLoop();
+
     //clear the onpress/onrelease actions now that they have been sampled 
     //in that loop to avoid resampling
     Shared.releaseSingleEventActions();
 
     editorId = requestAnimationFrame(editorLoop); //call animate recursively on next frame 
 
+}
+
+
+function render_gizmo() {
+    if (1) {
+        // 1. Render main scene
+        Shared.renderer.setViewport(0, 0, Shared.container.clientWidth, Shared.container.clientHeight);
+        Shared.renderer.clear();
+        Shared.renderer.render(Shared.scene, Shared.camera);
+        // console.log("draw calls main scene", renderer.info.render.calls);
+        Stats.renderStats.drawcalls = Shared.renderer.info.render.calls;
+
+        // 2. Render mini viewport (e.g., bottom-left corner)
+        const vpSize = 100;
+        Shared.renderer.setViewport(10, 10, vpSize, vpSize);
+        Shared.renderer.setScissor(10, 10, vpSize, vpSize);
+        Shared.renderer.setScissorTest(true);
+        Shared.renderer.clearDepth();
+        Shared.renderer.render(axesScene, axesCamera);
+        // console.log("draw calls mini viewport", renderer.info.render.calls);
+        Stats.renderStats.drawcalls += Shared.renderer.info.render.calls;
+
+        // 3. Reset to full Shared.canvas
+        Shared.renderer.setScissorTest(false);
+
+        //To sync the mini gizmo with your main camera orientation:
+        const worldQuat = new THREE.Quaternion();
+        Shared.camera.getWorldQuaternion(worldQuat);
+        axesHelper.quaternion.copy(worldQuat).invert();
+
+    } else {
+        Shared.renderer.render(Shared.scene, Shared.camera);
+        // console.log("draw calls main scene", renderer.info.render.calls);
+        Stats.renderStats.drawcalls = Shared.renderer.info.render.calls;
+        Shared.renderer.info.reset(); //it auto resets normally
+    }
+}
+
+function highlightMeshToDelete(){
+
+    //If eraser mode set raycast against any geometry
+    raycastChunkArray = Object.values(chunksInScene);
+
+    //perform the raycast
+    raycaster.setFromCamera(screenCenter, Shared.camera);
+    let doesIntersect = false;
+    const hits = raycaster.intersectObjects(raycastChunkArray, false);
+
+    let closestHit = null;
+
+    for (const hit of hits) {
+        if (!closestHit || hit.distance < closestHit.distance) {
+            closestHit = hit;
+        }
+    }
+
+    if (closestHit && closestHit.distance < 12) {
+        doesIntersect = true;
+    }
+
+    if (doesIntersect) {
+
+        let facehit = closestHit.faceIndex;
+        let facetotilerange = closestHit.object?.userData?.facetotilerange;
+        selectInfo = facetotilerange.find(r => facehit >= r.start && facehit <= r.end);
+
+        if (!prevSelectInfo || prevSelectInfo !== selectInfo) {
+            // console.log(selectInfo.direction,selectInfo.tilexyz,selectInfo.uvmeshid);
+
+            if (selectObj) {
+                selectObj.geometry.dispose();
+                Shared.scene.remove(selectObj);
+                selectObj = null;
+            }
+
+            prevSelectInfo = selectInfo;
+
+            if (Shared.sceneGeometryDict.has(selectInfo.uvmeshid)) {
+                selectObj = new THREE.Mesh(Shared.sceneGeometryDict.get(selectInfo.uvmeshid).clone(), markerremovematerial);
+            } else {
+                //should not go there normally but support it just in case
+                const { uvid, meshid } = Shared.decodeID(selectInfo.uvmeshid);
+                selectObj = generateGeometry(uvid, meshid);
+            }
+            const { rot, pos: offset } = RotOffsetPerSlice[selectInfo.direction];
+            const { x, y, z } = Shared.parseGridKey(selectInfo.tilexyz);
+            const selectObjPos = new THREE.Vector3();
+            selectObjPos.set(
+                offset.x + Shared.cellSize * x,
+                offset.y + Shared.cellSize * y,
+                offset.z + Shared.cellSize * z
+            );
+            const m = new THREE.Matrix4().copy(rot).setPosition(selectObjPos);
+            // Apply matrix to the mesh's transform
+            m.decompose(selectObj.position, selectObj.quaternion, selectObj.scale);
+
+            selectObj.name = "removeMarker";
+            Shared.scene.add(selectObj);
+
+        }
+
+    } else {
+
+        if (selectObj) {
+            selectObj.geometry.dispose();
+            Shared.scene.remove(selectObj);
+            selectObj = null;
+        }
+        selectInfo = null;
+        prevSelectInfo = null;
+        // console.log("no intersection found");
+    }
+}
+
+function floorRaycast() {
+
+    //FLOOR RAYCAST TEST
+    raycaster.setFromCamera(screenCenter, Shared.camera);
+    const intersects = raycaster.intersectObject(floor);
+
+    selectValid = false;
+
+    let doesIntersect = false;
+    if (intersects.length > 0) {
+        doesIntersect = intersects[0].distance < 12;
+    }
+
+    if (doesIntersect) {
+        const point = intersects[0].point;
+        // console.log("intersectpoint",point);
+        selectValid = true;
+        // Convert world position to grid cell
+        selectX = Math.floor(point.x / Shared.cellSize);
+        selectY = Shared.floorHeight;
+        selectZ = Math.floor(point.z / Shared.cellSize);
+    }
+
+}
+
+
+function updateMarker(){
+
+    markergroupxz.visible = false;
+    markergroupyz.visible = false;
+    markergroupxy.visible = false;
+
+    if (selectValid) {
+
+        markergroupxz.visible = showMarkerXZ;
+        markergroupyz.visible = showMarkerYZ;
+        markergroupxy.visible = showMarkerXY;
+
+        //UPDATE ONLY WHEN NEW CELL SELECTED
+        if (
+            (selectX != prevSelectX) ||
+            (selectZ != prevSelectZ) ||
+            wallModeSelect != prevWallModeSelect ||
+            Shared.editorState.hasClicked
+        ) {
+            Shared.editorState.hasClicked = false;
+            // console.log("newpoint");
+
+            if (!Shared.editorState.mouseIsDown) {
+                markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
+                markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
+                markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
+            } else {
+
+                //UPDATE SELECTION BBOX
+                boxselectModeendX = selectX;
+                boxselectModeendZ = selectZ;
+
+                //UPDATE MARKER POSITION
+                markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+                markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
+
+
+                //CLEAR MARKER MESHES
+                markergroupxz.clear();
+                markergroupyz.clear();
+                markergroupxy.clear();
+
+                //CALCULATE MARKER SIZE
+                let scaleX = Math.abs(boxselectModeendX - boxselectModestartX);
+                let scaleZ = Math.abs(boxselectModeendZ - boxselectModestartZ);
+
+                //GENERATE MARKER MESHES
+                //RED
+                if (showMarkerXZ) {
+                    for (let x = 0; x <= scaleX; x++) {
+                        for (let z = 0; z <= scaleZ; z++) {
+                            const copytile = markerxz.clone();
+                            markergroupxz.add(copytile);
+                            copytile.position.set(x + Shared.cellSize / 2, 0, z + Shared.cellSize / 2);
+                        }
+                    }
+                }
+
+                //GREEN
+                if (showMarkerYZ) {
+                    for (let x = 0; x <= scaleX + 1; x++) {
+                        for (let z = 0; z <= scaleZ; z++) {
+                            //in normal mode adding walls we want to surround the area with walls
+                            //so add them everywhere except "inside" the selection
+                            let todelete = false;
+                            if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
+                                if (x > 0 && x < scaleX + 1) todelete = true;
+                            } else {
+                                if (x > 0) continue;
+                            }
+                            for (let y = 0; y < Shared.wallHeight; y++) {
+                                if (todelete) continue;
+                                const copytile = markeryz.clone();
+                                markergroupyz.add(copytile);
+                                copytile.position.copy(markeryz.position);
+                                copytile.position.x += x;
+                                copytile.position.z += z;
+                                copytile.position.y += y;
+                            }
+                        }
+                    }
+                }
+
+                //BLUE
+                if (showMarkerXY) {
+                    for (let x = 0; x <= scaleX; x++) {
+                        for (let z = 0; z <= scaleZ + 1; z++) {
+                            let todelete = false;
+                            if (wallModeSelect == MODEW || wallModeSelect == MODEA) {
+                                if (z > 0 && z < scaleZ + 1) todelete = true;
+                            } else {
+                                if (z > 0) continue;
+                            }
+                            for (let y = 0; y < Shared.wallHeight; y++) {
+                                if (todelete) continue;
+                                const copytile = markerxy.clone();
+                                markergroupxy.add(copytile);
+                                copytile.position.copy(markerxy.position);
+                                copytile.position.x += x;
+                                copytile.position.z += z;
+                                copytile.position.y += y;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //KEEP TRACK OF LAST SELECTED CELL
+        prevSelectX = selectX;
+        prevSelectZ = selectZ;
+        prevWallModeSelect = wallModeSelect;
+
+    } else {
+
+        //NO CELL SELECTED, REINIT MARKER AND BBOX
+        Shared.editorState.mouseIsDown = false;
+        //reinit marker only when it was valid before and
+        //it is not anymore
+        if (prevSelectValid)
+            reinitMarker();
+
+    }
+
+    prevSelectValid = selectValid;
+
+}
+
+function updateLightMarker(){
+    if (selectValid){
+        //UPDATE ONLY WHEN NEW CELL SELECTED
+        if (
+            (selectX != prevSelectX) ||
+            (selectZ != prevSelectZ) ||
+            Shared.editorState.hasClicked
+        ) {
+            Shared.editorState.hasClicked = false;
+            lightMarkerGroup.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
+        }
+        //KEEP TRACK OF LAST SELECTED CELL
+        prevSelectX = selectX;
+        prevSelectZ = selectZ;
+    } else {
+        //NO CELL SELECTED
+        Shared.editorState.mouseIsDown = false;
+    }
+    prevSelectValid = selectValid;
 }
 
 /*---------------------------------*/
@@ -1179,8 +1393,7 @@ function createScene() {
     Shared.scene.add(lightGroup);
     Shared.scene.add(lightHelperGroup);
 
-    const ambientLight = new THREE.AmbientLight(new THREE.Color(1, 1, 1).multiplyScalar(0.45)); // Soft light
-    Shared.scene.add(ambientLight);
+    Shared.scene.add(Shared.ambientLight);
 
 }
 
@@ -1248,19 +1461,33 @@ export function setAddMode(mode) {
     switch (mode) {
         case ADDPLANEMODE:
             currentAddMode = ADDPLANEMODE;
-            showMarkerXZ = true;
+            markergroupxz.visible = showMarkerXZ;
+            markergroupyz.visible = showMarkerYZ;
+            markergroupxy.visible = showMarkerXY;
+            lightMarkerGroup.visible=false;
+            // lightMarkerHelper.visible=false;
+            Shared.editorState.renderOneFrame = true;
             break;
         case ADDLIGHTMODE:
+            // console.log("ADDLIGHTMODE");
             currentAddMode = ADDLIGHTMODE;
-            showMarkerXY = false;
-            showMarkerYZ = false;
-            showMarkerXZ = false;
+            setEraser(false);
+            markergroupxz.visible = false;
+            markergroupyz.visible = false;
+            markergroupxy.visible = false;
+            lightMarkerGroup.visible=true;
+            // lightMarkerHelper.visible=true;
+            Shared.editorState.renderOneFrame = true;
             break;
-        case ADDMESHMODE:
-            currentAddMode = ADDMESHMODE;
-            showMarkerXY = false;
-            showMarkerYZ = false;
-            showMarkerXZ = false;
+        case ADDRANDMODE:
+            currentAddMode = ADDRANDMODE;
+            setEraser(false);
+            markergroupxz.visible = false;
+            markergroupyz.visible = false;
+            markergroupxy.visible = false;
+            lightMarkerGroup.visible=false;
+            // lightMarkerHelper.visible=true;
+            Shared.editorState.renderOneFrame = true;
             break;
     }
 }
@@ -1654,9 +1881,12 @@ export function compressFlattenedGrid(flatArray) {
         const cell = flatArray[i] || null; // include final iteration
         const cellStr = stringifyCell(cell);
 
-        if (cellStr === lastCell && count < repeatCountMax) {
+        if (cellStr === lastCell && count < (repeatCountMax-1)) {
             count++;
         } else {
+            if (count >= repeatCountMax){
+                console.log("repeatcountmax");
+            }
             if (lastCell !== null) {
                 // push previous cell with repeat count
                 result.push(
@@ -1679,6 +1909,7 @@ let sceneGeometryDictID = {};
 const sceneGeometryBitWidth = 11;//2^11=2000 possible geometries, reserve one bit at the top to indicate "last" cell entry
 const sceneGeometryHexWidth = Math.ceil(sceneGeometryBitWidth/4);//2^11=2000 possible geometries, reserve one bit at the top to indicate "last" cell entry
 const sceneGeometryMax = 1<<sceneGeometryBitWidth;
+// const repeatCountMax = 256;
 const repeatCountMax = 256;
 const repeatCountHexWidth = Math.log2(repeatCountMax)/4;
 export function saveLevel() {
@@ -1928,7 +2159,11 @@ export function incFloorHeight(inc){
 }
 export function setFloorHeight(height){
     Shared.setFloorHeight(height);
-    reinitMarker();
+
+    switch (currentAddMode) {
+        case ADDPLANEMODE: reinitMarker(); break;
+        case ADDLIGHTMODE: lightMarkerGroup.position.set(selectX, Shared.floorHeight, selectZ); break;
+    }
 
     // if (height != Shared.FLOORHEIGHTDEFAULT){
     //     // gridtwo.visible = true;
@@ -2071,4 +2306,183 @@ function clearAllGridMapChunks(){
         clearGridMapChunk(chunkKey);
     }
     gridMapChunk.clear();
+}
+
+export function randLevel(){
+    console.log("randLevel");
+    resetLevel();
+
+    const seedValue = parseInt(document.getElementById("SeedField").value, 10);
+    Shared.setSeed(seedValue);
+    buildMaze();
+
+    rebuildDirtyChunks();
+} 
+
+function getUvMeshId(uvname,meshname){
+    const uvid = Shared.atlasUVsidx[uvname];
+    const meshid = Shared.atlasMeshidx[meshname];
+    return Shared.encodeID(uvid,meshid);
+}
+
+function buildMaze() {
+
+    // const wooduvmeshid = getUvMeshId("FLOORBOARD", "Plane");
+    // const walluvmeshid = getUvMeshId("WALL", "Plane");
+    const pillaruvmeshid = getUvMeshId("WALL", "ArchBase");
+    
+    const sidel = parseInt(document.getElementById("MazeSize").value, 10);
+    const minX = -sidel, maxX = sidel;
+    const minZ = -sidel, maxZ = sidel;
+    const minY = 0, maxY = parseInt(document.getElementById("MazeHeight").value, 10);
+
+    const mazeGridMap = new Map(); // key → "floor" | "wall"
+
+    function isFloor(x,z){
+        const k = Shared.getGridKey(x, 0, z);
+        let cell = mazeGridMap.get(k)
+        return cell?.floor || false;
+    }
+
+    function placeFloor(x,z){
+        mark(x,0,z,"floor",true);
+    }
+
+    function placeWall(x, z, dir) {
+        // for (let y = 0; y <= maxY; y++) {
+        mark(x, 0, z, dir, true);
+        // }
+    }
+    function placeWallIfNoAdjacentFloor(x, z, dir) {
+        switch (dir) {
+            case "north": if (!isFloor(x,z-1)) placeWall(x,z,"north"); break;
+            case "south": if (!isFloor(x,z+1)) placeWall(x,z,"south"); break;
+            case "west" : if (!isFloor(x-1,z)) placeWall(x,z,"west"); break;
+            case "east" : if (!isFloor(x+1,z)) placeWall(x,z,"east"); break;
+        }
+    }
+
+    function canBePlaced(x,z){
+        // boundary?
+        return (!(x < minX || x > maxX || z < minZ || z > maxZ || 
+            // corridor already exists?
+                isFloor(x,z)));
+    }
+
+    function mark(x, y, z, key,value) {
+        const k = Shared.getGridKey(x, y, z);
+        let cell = mazeGridMap.get(k)
+        if (!cell) {
+            cell = {
+                "floor": false,
+                "north": false,
+                "south": false,
+                "west": false,
+                "east": false,
+            };
+        }
+        cell[key]=value;
+        mazeGridMap.set(k,cell);
+    }
+
+    function dirToDelta(dir) {
+        switch (dir) {
+            case "north": return [0, -1];
+            case "south": return [0, 1];
+            case "west":  return [-1, 0];
+            case "east":  return [1, 0];
+        }
+    }
+
+    function carve(x, z, dir) {
+
+        const length = Shared.getRandomInt(3, 4);
+        const [dx, dz] = dirToDelta(dir);
+
+        let currx,currz;
+        let nextx,nextz;
+        for (let step = 0; step < length; step++) {
+            currx = x + dx * step;
+            currz = z + dz * step;
+            nextx = x + dx * (step + 1);
+            nextz = z + dz * (step + 1);
+
+            placeFloor(currx, currz);
+            if (canBePlaced(nextx, nextz) && step<length-1) {
+
+                switch (dir) {
+                    case "north":
+                    case "south":
+                        placeWallIfNoAdjacentFloor(currx, currz, "west");
+                        placeWallIfNoAdjacentFloor(currx, currz, "east");
+                        break;
+                    case "west":
+                    case "east":
+                        placeWallIfNoAdjacentFloor(currx, currz, "north");
+                        placeWallIfNoAdjacentFloor(currx, currz, "south");
+                        break;
+                }
+
+            } else {
+                break;
+            }
+        }
+        x=currx;
+        z=currz;
+
+        //intersection
+        const newdirections=[];
+        const stuckdirections=[];
+        const OPPOSITE = {
+        north: "south",
+        south: "north",
+        east:  "west",
+        west:  "east",
+        };        
+        for (const newdir of ["north","south","west","east"]){
+            const [dx, dz] = dirToDelta(newdir);
+            if (newdir == OPPOSITE[dir]) continue;
+            if (canBePlaced(x+dx,z+dz) && (Shared.branchChance(25))) newdirections.push({newdir:newdir,nx:x+dx,nz:z+dz});
+            else stuckdirections.push(newdir);
+        }
+
+        // for (const stuckdir of stuckdirections) placeWallIfNoAdjacentFloor(x,z,stuckdir);
+        for (const stuckdir of stuckdirections) placeWall(x,z,stuckdir);
+        for (const {newdir,nx,nz} of newdirections) {
+            carve(nx,nz,newdir)
+        }
+    }
+
+    //place a couple rooms
+    // const numrooms = 8;
+    // const sizeroomx = 8;
+    // const sizeroomz = 8;
+    // for (let r = 0; r < numrooms; r++) {
+    //     const brx = Shared.getRandomInt(minX, maxX);
+    //     const brz = Shared.getRandomInt(minZ, maxZ);
+    //     const tlx = brx + Shared.getRandomInt(2, sizeroomx);
+    //     const tlz = brz + Shared.getRandomInt(2, sizeroomz);
+    //     for (let x = brx; x < tlx; x++) {
+    //         for (let z = brz; z < tlz; z++) {
+    //             placeFloor(x, z);
+    //         }
+    //     }
+    // }
+
+    carve(0, 0, "north"); // Start in the center
+
+    //now parse mazegridmap to build the walls and floors
+    for (const [key, cell] of mazeGridMap.entries()) {
+        const { x, y, z } = Shared.parseGridKey(key);
+        const { floor, north, south, west, east } = cell;
+        if (floor) placeTile(x, y, z, "XZ", mazeFloorUvMeshId, "Plane", false, false);
+        for (let y = 0; y <= maxY; y++) {
+            placeTile(x,y,z,"XZ",pillaruvmeshid,"ArchBase",false,false);
+            if (north) placeTile(x, y, z, "XY", mazeWallUvMeshId, "Plane", false, false);
+            if (south) placeTile(x, y, z + 1, "XY", mazeWallUvMeshId, "Plane", false, false);
+            if (west) placeTile(x, y, z, "YZ", mazeWallUvMeshId, "Plane", false, false);
+            if (east) placeTile(x + 1, y, z, "YZ", mazeWallUvMeshId, "Plane", false, false);
+        }
+    }
+
 }
