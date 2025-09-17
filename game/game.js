@@ -56,6 +56,8 @@ export function startGameLoop() {
     gameId = requestAnimationFrame(gameLoop);
     Shared.resetCamera();
     Shared.clock.start();
+    Shared.ambientLight.color.set(Shared.AMBIENTLIGHTGAMECOLOR);
+
 }
 
 /*---------------------------------*/
@@ -158,17 +160,21 @@ function isColliding(actor, moveVectorv) {
     const posx = Math.floor(actor.position.x);
     const posz = Math.floor(actor.position.z);
     const csize = Shared.cellSize;
-    let k;
+    let k,k2;
+    
     if (moveVectorv.x < 0) //camera moving towards decreasing X
     {
         k = Shared.getGridKey(posx, 0, posz);
-        if (Shared.gridMap.YZ.has(k)) {
+        k2 = Shared.getGridKey(posx-1, 0, posz);
+        const cell = Shared.gridMap.XZ.get(k2);
+        if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("Pillar"))))) {
             isCollidingX = ((actor.position.x - posx) % csize) <= minDistancefromWalls;
             // colliderX1 = Shared.gridMapYZ.get(k);
-        }
+        } 
     } else {//camera moving towards increasing X
         k = Shared.getGridKey(posx + 1, 0, posz);
-        if (Shared.gridMap.YZ.has(k)) {
+        const cell = Shared.gridMap.XZ.get(k);
+        if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("Pillar"))))) {
             isCollidingX = ((actor.position.x - posx) % csize) >= (csize - minDistancefromWalls);
             // colliderX2 = Shared.gridMapYZ.get(k);
         }
@@ -177,13 +183,16 @@ function isColliding(actor, moveVectorv) {
     if (moveVectorv.z < 0) //camera moving towards decreasing Z
     {
         k = Shared.getGridKey(posx, 0, posz);
-        if (Shared.gridMap.XY.has(k)) {
+        k2 = Shared.getGridKey(posx, 0, posz-1);
+        const cell = Shared.gridMap.XZ.get(k2);
+        if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("Pillar")))) {
             isCollidingZ = ((actor.position.z - posz) % csize) <= minDistancefromWalls;
             // colliderZ1 = Shared.gridMapXY.get(k);
         }
     } else {//camera moving towards increasing Z
         k = Shared.getGridKey(posx, 0, posz + 1);
-        if (Shared.gridMap.XY.has(k)) {
+        const cell = Shared.gridMap.XZ.get(k);
+        if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("Pillar")))) {
             isCollidingZ = ((actor.position.z - posz) % csize) >= (csize - minDistancefromWalls);
             // colliderZ2 = Shared.gridMapXY.get(k);
         }
