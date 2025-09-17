@@ -260,6 +260,14 @@
             <canvas id="matpopupCanvas"></canvas>
             </div>
 
+            <div id="mazewallpopup" class="popup">
+            <canvas id="mazewallpopupCanvas"></canvas>
+            </div>
+
+            <div id="mazefloorpopup" class="popup">
+            <canvas id="mazefloorpopupCanvas"></canvas>
+            </div>        
+
             <div id="meshpopup" class="popup">
             <canvas id="meshpopupCanvas"></canvas>
             </div>
@@ -268,7 +276,7 @@
         <div id="ui-panel">
             <div class="tab-header">Game controls</div>
             <div class="tab">
-                <div class="tab-header" data-mode="0">+ Add Planes (1)</div>
+                <div class="tab-header" data-mode="0">+ Add meshes (1) </div>
                 <div class="tab-content">
                     <!-- <button id="AddBtn">Add Planes (1)</button> -->
                     <!-- <select id="matSelect"></select> TODO: this is a simple combobox for the moment -->
@@ -305,17 +313,49 @@
             </div>
 
             <div class="tab">
-                <div class="tab-header" data-mode="1">+ Add lights (2)</div>
+                <div class="tab-header" data-mode="1">+ Add lights (2) </div>
                 <div class="tab-content">
                     <!-- <button id="AddLBtn">Add Lights (2)</button> -->
                 </div>
             </div>
             
             <div class="tab">
-                <div class="tab-header" data-mode="SaveLoad">Save/Load</div>
+                <div class="tab-header" data-mode="2">+ Generate random (3) </div>
                 <div class="tab-content">
+                    <button id="RandBtn">Generate</button>
+                    <div class="form-row">
+                        <label for="SeedField">Seed:</label>
+                        <input type="number" id="SeedField" value="4" />
+                    </div>
+                    <div class="form-row">
+                        <label for="MazeSize">Maze size:</label>
+                        <input type="number" id="MazeSize" value="5" />
+                    </div>
+                    <div class="form-row">
+                        <label for="MazeHeight">Maze height:</label>
+                        <input type="number" id="MazeHeight" value="2" />
+                    </div>
+                    <div class="form-row">
+                        <label for="mazewallSelect">Walls:</label>
+                        <button id="mazewallSelectBtn">
+                            <canvas id="mazewallPreviewCanvas" width="64" height="64"></canvas>
+                        </button>                        
+                    </div>
+                    <div class="form-row">
+                        <label for="mazefloorSelect">Floor:</label>
+                        <button id="mazefloorSelectBtn">
+                            <canvas id="mazefloorPreviewCanvas" width="64" height="64"></canvas>
+                        </button>                        
+                    </div>
+                </div>
+            </div>
+
+            <!-- <div class="tab">
+                <div class="tab-header" data-mode="SaveLoad">Save/Load</div>
+                <div class="tab-content"> -->
+                <div id="utilities" style="padding:10px; gap:10px; display: flex; flex-direction: column;">
                     <button id="LoadBtn" style="position: relative; overflow: hidden;">
-                        <span id="LoadBtnText" style="position: relative; z-index: 2;">Load Planes (L)</span>
+                        <span id="LoadBtnText" style="position: relative; z-index: 2;">Load (L)</span>
                         <div id="LoadBtnProgress" style="
                             position: absolute;
                             top: 0; left: 0; bottom: 0;
@@ -326,17 +366,18 @@
                             opacity: 0.5;
                         "></div>
                     </button>
-                    <button id="SaveBtn">Save Planes (T)</button>
-                    <button id="BakeBtn">Bake Planes (B)</button>
-                    <button id="ResetBtn">Reset</button>
-                    <button id="StartBtn">Start Game (G)</button>
+                    <button id="SaveBtn">Save (T)</button>
+                    <!-- <button id="BakeBtn">Bake Planes (B)</button> -->
+                    <button id="ResetBtn">Reset </button>   
+                    <button id="StartBtn">Start Game(G)</button>
                 </div>  
-            </div>
+                <!-- </div>   -->
+            <!-- </div> -->
 
             <!-- <div class="tab"> -->
                 <!-- <div class="tab-header">Stats</div> -->
                 <!-- <div class="tab-content"> -->
-                    <div id="text-stats" style="font-family: monospace; font-size: 12px; line-height: 1.5em;">
+                    <div id="text-stats" style="padding:10px;font-family: monospace; font-size: 12px; line-height: 1.5em;">
                         <div>FPS: <span id="fps">0</span></div>
                         <div>Meshes: <span id="meshCount">0</span></div>
                         <div>Visible Meshes: <span id="visibleMeshCount">0</span></div>
