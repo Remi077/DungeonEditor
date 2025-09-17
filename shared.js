@@ -17,11 +17,28 @@ if (cellSize != 1) {
 
 // pseudoseed
 // const rng = seedrandom('666'); // Create a seeded random generator
-export const rng = seedrandom(); // Create a seeded random generator
+// export const rng = seedrandom(); // Create a seeded random generator
+export let rng = seedrandom(); // Create a seeded random generator
+
+// Reset RNG with a new seed
+export function setSeed(newSeed) {
+    rng = seedrandom(newSeed);
+}
 
 // Function to generate a random position between min and max using rng()
 export function getRandom(min, max) {
-    return rng() * (max - min) + min; // Random number between min and max
+    const r= rng() * (max - min) + min; // Random number between min and max
+    console.log("getRandom",r)
+    return r;
+}
+
+// Random integer between min and max (inclusive)
+export function getRandomInt(min, max) {
+    return Math.floor(rng() * (max - min + 1)) + min;
+}
+
+export function branchChance(p) {
+    return getRandomInt(0, 100) < p * 100;
 }
 
 /*-----------------------------------------------------*/
@@ -59,6 +76,10 @@ export const MODEMENU = 0;
 export const MODEEDITOR = 1;
 export const MODEGAME = 2;
 
+// ambient light in editor and game mode
+export const AMBIENTLIGHTEDITCOLOR =new THREE.Color(1, 1, 1).multiplyScalar(0.45);
+export const AMBIENTLIGHTGAMECOLOR =new THREE.Color(0, 0, 1).multiplyScalar(0.10);
+
 // editor variables
 export const editorState = {
     mode          : MODEEDITOR,
@@ -93,18 +114,27 @@ export let thumbDictUVsArray   = [];         //mesh array (from dictionary)
 export const uvInfo = {};
 
 // Dynamically create a canvas element
-export const canvas          = document.getElementById('three-canvas');
-export const container       = document.getElementById('canvas-container');
-export const uipanel         = document.getElementById('ui-panel');
-export const matpopup        = document.getElementById("matpopup");
-export const meshpopup       = document.getElementById("meshpopup");
-export const matpopupCanvas  = document.getElementById("matpopupCanvas");
-export const meshpopupCanvas = document.getElementById("meshpopupCanvas");
+export const canvas               = document.getElementById('three-canvas');
+export const container            = document.getElementById('canvas-container');
+export const uipanel              = document.getElementById('ui-panel');
+
+export const matpopup             = document.getElementById("matpopup");
+export const meshpopup            = document.getElementById("meshpopup");
+export const mazewallpopup        = document.getElementById("mazewallpopup");
+export const mazefloorpopup       = document.getElementById("mazefloorpopup");
+
+export const matpopupCanvas       = document.getElementById("matpopupCanvas");
+export const meshpopupCanvas      = document.getElementById("meshpopupCanvas");
+export const mazewallpopupCanvas  = document.getElementById("mazewallpopupCanvas");
+export const mazefloorpopupCanvas = document.getElementById("mazefloorpopupCanvas");
 
 // Scene, Camera, Renderer
 export const scene    = new THREE.Scene();
 export const camera   = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
 export const renderer = new THREE.WebGLRenderer({ canvas:canvas, alpha: true });                                     // important
+
+//ambient light
+export let ambientLight = new THREE.AmbientLight(AMBIENTLIGHTEDITCOLOR); // Soft light;
 
 // Maps tracking tile/lights positions per PLANE
 export const gridMapChunk = new Map();
@@ -132,7 +162,7 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = true;
+    let online = false;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
@@ -234,7 +264,7 @@ export function setMode(mode) {
             startGameLoop();
             break;
         case MODEEDITOR:
-            StartBtn.textContent = "Start Game";
+            StartBtn.textContent = "Start Game (G)";
             stopGameLoop();
             ActionToKeyMap = editorActionToKeyMap;
             Actions = EditorActions;
