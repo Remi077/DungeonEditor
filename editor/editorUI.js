@@ -9,13 +9,16 @@ import * as GameHUD from '../game/gameHUD.js';
 /*-----------------------------------------------------*/
 // const AddBtn   = document.getElementById('AddBtn');
 // const AddLBtn  = document.getElementById('AddLBtn');
-const LoadBtn       = document.getElementById('LoadBtn');
-const SaveBtn       = document.getElementById('SaveBtn');
-const BakeBtn       = document.getElementById('BakeBtn');
-const ResetBtn      = document.getElementById('ResetBtn');
-const StartBtn      = document.getElementById('StartBtn');
-const matSelectBtn  = document.getElementById("matSelectBtn");
-const meshSelectBtn = document.getElementById("meshSelectBtn");
+// const BakeBtn       = document.getElementById('BakeBtn');
+const LoadBtn            = document.getElementById('LoadBtn');
+const SaveBtn            = document.getElementById('SaveBtn');
+const ResetBtn           = document.getElementById('ResetBtn');
+const StartBtn           = document.getElementById('StartBtn');
+const matSelectBtn       = document.getElementById("matSelectBtn");
+const meshSelectBtn      = document.getElementById("meshSelectBtn");
+const RandBtn            = document.getElementById('RandBtn');
+const mazewallSelectBtn  = document.getElementById("mazewallSelectBtn");
+const mazefloorSelectBtn = document.getElementById("mazefloorSelectBtn");
 
 /*-----------------------------------------------------*/
 // BUTTON LISTENERS
@@ -32,11 +35,14 @@ const meshSelectBtn = document.getElementById("meshSelectBtn");
 // });
 LoadBtn.addEventListener('click', () => { Editor.loadLevel(); });
 SaveBtn.addEventListener('click', () => { Editor.saveLevel(); });
-BakeBtn.addEventListener('click', () => { Editor.bakeLevel(); });
+// BakeBtn.addEventListener('click', () => { Editor.bakeLevel(); });
 ResetBtn.addEventListener('click', () => { Editor.resetLevel(); });
 StartBtn.addEventListener('click', () => { Shared.toggleGameMode(); });
-matSelectBtn.addEventListener('click', () => { openPopup(Shared.matpopup,true); });
-meshSelectBtn.addEventListener('click', () => { openPopup(Shared.meshpopup,true); });
+matSelectBtn.addEventListener('click', () => { openPopup(Shared.matpopup, true); });
+meshSelectBtn.addEventListener('click', () => { openPopup(Shared.meshpopup, true); });
+RandBtn.addEventListener('click', () => { Editor.randLevel(); });
+mazewallSelectBtn.addEventListener('click', () => { openPopup(Shared.mazewallpopup, true); });
+mazefloorSelectBtn.addEventListener('click', () => { openPopup(Shared.mazefloorpopup, true); });
 
 /*-----------------------------------------------------*/
 // COMBOBOX
@@ -91,8 +97,8 @@ document.addEventListener("pointerlockchange", () => {
         document.getElementById('crosshair').style.display = 'block';
         document.getElementById('pointer-lock-hint').style.display = 'block';
         document.addEventListener("mousemove", Shared.onMouseMove, false);
-        document.addEventListener("mousedown", onMouseClick, false);
-        document.addEventListener("mouseup", onMouseUp, false);
+        document.addEventListener("mousedown", Editor.onMouseClick, false);
+        document.addEventListener("mouseup", Editor.onMouseUp, false);
         document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
         closePopup();
     } else {
@@ -102,31 +108,31 @@ document.addEventListener("pointerlockchange", () => {
         document.getElementById('crosshair').style.display = 'none';
         document.getElementById('pointer-lock-hint').style.display = 'none';
         document.removeEventListener("mousemove", Shared.onMouseMove, false);
-        document.removeEventListener("mousedown", onMouseClick, false);
-        document.removeEventListener("mouseup", onMouseUp, false);
+        document.removeEventListener("mousedown", Editor.onMouseClick, false);
+        document.removeEventListener("mouseup", Editor.onMouseUp, false);
         document.removeEventListener("wheel", Editor.onMouseWheel, false);
     }
 });
 
-function onMouseUp(event){
-    Editor.onMouseUp(event);
-    //right click
-    if (event.button == 2) {
-        // if (event.ctrlKey || event.metaKey) {
-        if (event.altKey) {
-            openPopup(Shared.meshpopup);
-        } else {
-            openPopup(Shared.matpopup);
-        }
-        document.exitPointerLock();
-    }
-}
-function onMouseClick(event){
-    Editor.onMouseClick(event);
-    // if (event.button == 2) {
-    //     closePopup();
-    // }
-}
+// function onMouseUp(event){
+//     Editor.onMouseUp(event);
+//     //right click
+//     if (event.button == 2) {
+//         // if (event.ctrlKey || event.metaKey) {
+//         if (event.altKey) {
+//             openPopup(Shared.meshpopup);
+//         } else {
+//             openPopup(Shared.matpopup);
+//         }
+//         document.exitPointerLock();
+//     }
+// }
+// function onMouseClick(event){
+//     Editor.onMouseClick(event);
+//     // if (event.button == 2) {
+//     //     closePopup();
+//     // }
+// }
 
 /*-----------------------------------------------------*/
 // GAMEPLAY GLOBAL VARIABLES
@@ -205,22 +211,15 @@ document.addEventListener("UIChange", (e) => {
             break;
         case "MaterialChange":
             const matPreviewCanvas = document.getElementById("matPreviewCanvas");
-            const ctx = matPreviewCanvas.getContext("2d");
-            const atlasTexture = Shared.atlasMat.map;
-            const atlasImage = atlasTexture.image;
-            // clear
-            ctx.clearRect(0, 0, matPreviewCanvas.width, matPreviewCanvas.height);
-            
-            let size = Shared.atlasDict.SIZE;
-            let numy = Shared.atlasDict.NUMY-1;
-            const subImageX = (Shared.atlasUVsArray[value][1]?.x || 0) * size;
-            const subImageY = (numy-(Shared.atlasUVsArray[value][1]?.y || 0)) * size;
-            // draw the selected subimage from the atlas into the preview canvas
-            ctx.drawImage(
-                atlasImage,
-                subImageX, subImageY, size, size, // source
-                0, 0, matPreviewCanvas.width, matPreviewCanvas.height // destination
-            );
+            drawValueInCanvas(value,matPreviewCanvas);
+            break;
+        case "MazeWallChange":
+            const mazewallPreviewCanvas = document.getElementById("mazewallPreviewCanvas");
+            drawValueInCanvas(value,mazewallPreviewCanvas);
+            break;
+        case "MazeFloorChange":
+            const mazefloorPreviewCanvas = document.getElementById("mazefloorPreviewCanvas");
+            drawValueInCanvas(value,mazefloorPreviewCanvas);
             break;
         case "MeshChange":
             const meshPreviewCanvas = document.getElementById("meshPreviewCanvas");
@@ -233,7 +232,8 @@ document.addEventListener("UIChange", (e) => {
             let meshsize = Shared.thumbDict.SIZE;
             let meshnumy = Shared.thumbDict.NUMY-1;
             const meshsubImageX = (Shared.thumbDictUVsArray[value][1]?.x || 0) * meshsize;
-            const meshsubImageY = (meshnumy-(Shared.thumbDictUVsArray[value][1]?.y || 0)) * meshsize;
+            // const meshsubImageY = (meshnumy-(Shared.thumbDictUVsArray[value][1]?.y || 0)) * meshsize;
+            const meshsubImageY = ((Shared.thumbDictUVsArray[value][1]?.y || 0)) * meshsize;
             // draw the selected subimage from the atlas into the preview canvas
             meshctx.drawImage(
                 meshatlasImage,
@@ -272,11 +272,35 @@ document.addEventListener("UIChange", (e) => {
                 radio.checked = (parseInt(radio.value, 10) === parseInt(newValue, 10));
             });
             break;
+        case "openPopup":
+            openPopup(value);
+            document.exitPointerLock();
+            break;
         default:
             console.log("default",field);
             break;
     }
 });
+
+
+function drawValueInCanvas(thisvalue,thiscanvas){
+    const ctx = thiscanvas.getContext("2d");
+    const atlasTexture = Shared.atlasMat.map;
+    const atlasImage = atlasTexture.image;
+    // clear
+    ctx.clearRect(0, 0, thiscanvas.width, thiscanvas.height);
+    
+    let size = Shared.atlasDict.SIZE;
+    let numy = Shared.atlasDict.NUMY-1;
+    const subImageX = (Shared.atlasUVsArray[thisvalue][1]?.x || 0) * size;
+    const subImageY = (numy-(Shared.atlasUVsArray[thisvalue][1]?.y || 0)) * size;
+    // draw the selected subimage from the atlas into the preview canvas
+    ctx.drawImage(
+        atlasImage,
+        subImageX, subImageY, size, size, // source
+        0, 0, thiscanvas.width, thiscanvas.height // destination
+    );
+}
 
 
 /*-----------------------------------------------------*/
@@ -311,23 +335,24 @@ function expandHeader(header) {
             header.classList.add("green");
 
             // Call setAddMode if the header has a mode
-            const mode = header.dataset.mode;
-            switch (mode) {
-                case "addPlane":
-                    Editor.setAddMode(Editor.ADDPLANEMODE);
-                    // console.log("ADDPLANEMODE");
-                    break;
-                case "addLight":
-                    Editor.setAddMode(Editor.ADDLIGHTMODE);
-                    // console.log("ADDLIGHTMODE");
-                    break;
-                case "addMesh":
-                    Editor.setAddMode(Editor.ADDMESHMODE);
-                    // console.log("ADDMESHMODE");
-                    break;
-                case "addPlane":
-                    break;
-            }
+            const mode = parseInt(header.dataset.mode,10);
+            Editor.setAddMode(mode);
+            // switch (mode) {
+            //     case Editor.ADDPLANEMODE:
+            //         Editor.setAddMode(Editor.ADDPLANEMODE);
+            //         console.log("ADDPLANEMODE");
+            //         break;
+            //     case Editor.ADDLIGHTMODE:
+            //         Editor.setAddMode(Editor.ADDLIGHTMODE);
+            //         console.log("ADDLIGHTMODE");
+            //         break;
+            //     // case "addMesh":
+            //     //     Editor.setAddMode(Editor.ADDMESHMODE);
+            //     //     // console.log("ADDMESHMODE");
+            //     //     break;
+            //     case "addPlane":
+            //         break;
+            // }
 
         }
     }
@@ -358,6 +383,9 @@ export function setupEditorUI() {
     //setup the popup atlas canvas
     setupPopup(Shared.matpopupCanvas,Shared.atlasMat.map.image,Shared.atlasDict.SIZE,Editor.setMaterial);
     setupPopup(Shared.meshpopupCanvas,Shared.thumbDict.ATLASMATERIAL.map.image,Shared.thumbDict.SIZE,Editor.setMeshFromMeshindex);
+    
+    setupPopup(Shared.mazewallpopupCanvas,Shared.atlasMat.map.image,Shared.atlasDict.SIZE,Editor.setMazeWallMaterial);
+    setupPopup(Shared.mazefloorpopupCanvas,Shared.atlasMat.map.image,Shared.atlasDict.SIZE,Editor.setMazeFloorMaterial);
 }
 
 /*-----------------------------------------------------*/
@@ -385,8 +413,10 @@ function openPopup(thispopup, tr = false) {
     }
 }
 export function closePopup(){
-    Shared.matpopup.style.display = "none"; // toggle off if already open
-    Shared.meshpopup.style.display = "none"; // toggle off if already open
+    Shared.matpopup.style.display       = "none";  // toggle off if already open
+    Shared.meshpopup.style.display      = "none";  // toggle off if already open
+    Shared.mazewallpopup.style.display  = "none";  // toggle off if already open
+    Shared.mazefloorpopup.style.display = "none";  // toggle off if already open
 }
 
 function setupPopup(thiscanvas,thisimage,thiscellsize,thisaction) {
