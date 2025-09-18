@@ -330,7 +330,7 @@ export function setupEditor() {
     // setMeshFromMeshName("Plane");
     setMeshFromMeshindex(0);
     setMazeWallMaterial(0);
-    setMazeFloorMaterial(0);
+    setMazeFloorMaterial(1);
 
     // create the scene
     createScene();
@@ -644,13 +644,16 @@ function placeTileFromMesh(tilemesh, direction, erase=false) {
     let wx = Math.floor(worldPos.x / Shared.cellSize);
     let wy = Math.floor(worldPos.y / Shared.cellSize);
     let wz = Math.floor(worldPos.z / Shared.cellSize);
-    const meshname = tilemesh.geometry.userData?.meshname || "Plane";
 
-    placeTile(wx,wy,wz,direction,uvmeshid,meshname,erase);
+    placeTile(wx,wy,wz,direction,uvmeshid,erase);
 
 }
 
-function placeTile(wx,wy,wz,direction,uvmeshid,meshname,erase=false,undoable=true) {
+function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
+
+
+    const { uvid, meshid } = Shared.decodeID(uvmeshid);
+    const meshname = Shared.atlasMeshArray[meshid][0];
 
     const undoitem = {
             wx:wx,
@@ -2110,7 +2113,7 @@ function loadFlattenedMap(hstr, bb, direction, sceneGeometryDictArray, order = [
                 let wy = coords.y * Shared.cellSize;// + offset.y;
                 let wz = coords.z * Shared.cellSize;// + offset.z;
                 
-                placeTile(wx,wy,wz,direction,geom.uvmeshid,geom.meshname,false,false);
+                placeTile(wx,wy,wz,direction,geom.uvmeshid,false,false);
             });
         }
         geomArray = [];
@@ -2186,7 +2189,7 @@ function undo() {
     if (undogroups.length > 0) {
         const thisundogroup = undogroups.pop();
         for (const u of thisundogroup) {
-            placeTile(u.wx,u.wy,u.wz,u.direction,u.uvmeshid,u.meshname,u.erase,false);
+            placeTile(u.wx,u.wy,u.wz,u.direction,u.uvmeshid,u.erase,false);
         }
     }
 }
@@ -2329,12 +2332,17 @@ function buildMaze() {
 
     // const wooduvmeshid = getUvMeshId("FLOORBOARD", "Plane");
     // const walluvmeshid = getUvMeshId("WALL", "Plane");
-    const pillaruvmeshid = getUvMeshId("WALL", "ArchBase");
+    const { uvid, meshid } = Shared.decodeID(mazeWallUvMeshId);
+    const matname = Shared.atlasUVsArray[uvid][0];
+    const pillaruvmeshid = getUvMeshId(matname, "ArchBase");
     
     const sidel = parseInt(document.getElementById("MazeSize").value, 10);
     const minX = -sidel, maxX = sidel;
     const minZ = -sidel, maxZ = sidel;
     const minY = 0, maxY = parseInt(document.getElementById("MazeHeight").value, 10);
+    const minCorrLength = Math.max(2,parseInt(document.getElementById("MazeSecLMin").value, 10));
+    const maxCorrLength = Math.max(minCorrLength,parseInt(document.getElementById("MazeSecLMax").value, 10));
+    const branchProba = parseInt(document.getElementById("MazeBranchProba").value, 10)/100;
 
     const mazeGridMap = new Map(); // key → "floor" | "wall"
 
@@ -2342,6 +2350,22 @@ function buildMaze() {
         const k = Shared.getGridKey(x, 0, z);
         let cell = mazeGridMap.get(k)
         return cell?.floor || false;
+    }
+
+    function isOpenedRoom(x,z){
+        const k = Shared.getGridKey(x, 0, z);
+        let cell = mazeGridMap.get(k)
+        if (cell?.room){
+            if (cell.roomid){
+                if (roomHasDoor[cell.roomid]){
+                    return true;
+                } else {
+                    roomHasDoor[cell.roomid]=true;
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     function placeFloor(x,z){
@@ -2394,20 +2418,24 @@ function buildMaze() {
         }
     }
 
-    function carve(x, z, dir) {
+    const OPPOSITE = { north: "south", south: "north", east: "west", west: "east" };
 
-        const length = Shared.getRandomInt(3, 4);
+    function carveStep(x, z, dir) {
+
+        const length = Shared.getRandomInt(minCorrLength, maxCorrLength);
         const [dx, dz] = dirToDelta(dir);
 
-        let currx,currz;
-        let nextx,nextz;
+        let currx = x, currz = z;
+        // let nextx,nextz;
         for (let step = 0; step < length; step++) {
             currx = x + dx * step;
             currz = z + dz * step;
-            nextx = x + dx * (step + 1);
-            nextz = z + dz * (step + 1);
 
             placeFloor(currx, currz);
+
+            const nextx = x + dx * (step + 1);
+            const nextz = z + dz * (step + 1);
+
             if (canBePlaced(nextx, nextz) && step<length-1) {
 
                 switch (dir) {
@@ -2427,62 +2455,140 @@ function buildMaze() {
                 break;
             }
         }
-        x=currx;
-        z=currz;
+        // x=currx;
+        // z=currz;
 
-        //intersection
-        const newdirections=[];
-        const stuckdirections=[];
-        const OPPOSITE = {
-        north: "south",
-        south: "north",
-        east:  "west",
-        west:  "east",
-        };        
-        for (const newdir of ["north","south","west","east"]){
+        // intersection expansion
+        const validDirs = [];
+        const stuckDirs = [];
+        const shuffled = shuffle(["north", "south", "west", "east"]);
+
+        // first, collect all valid directions ignoring branchChance
+        for (const newdir of shuffled) {
+            if (newdir === OPPOSITE[dir]) continue;
             const [dx, dz] = dirToDelta(newdir);
-            if (newdir == OPPOSITE[dir]) continue;
-            if (canBePlaced(x+dx,z+dz) && (Shared.branchChance(25))) newdirections.push({newdir:newdir,nx:x+dx,nz:z+dz});
-            else stuckdirections.push(newdir);
+            const nx = currx + dx, nz = currz + dz;
+
+            if (canBePlaced(nx, nz)) {
+                validDirs.push({ x: nx, z: nz, dir: newdir });
+            } else {
+                stuckDirs.push(newdir);
+            }
         }
 
-        // for (const stuckdir of stuckdirections) placeWallIfNoAdjacentFloor(x,z,stuckdir);
-        for (const stuckdir of stuckdirections) placeWall(x,z,stuckdir);
-        for (const {newdir,nx,nz} of newdirections) {
-            carve(nx,nz,newdir)
+        // then apply branchChance only if more than one valid branch
+        const newBranches = [];
+        if (validDirs.length === 0) {
+            // nothing to branch, all directions stuck
+        } else if (validDirs.length === 1) {
+            // only one option → always keep it
+            newBranches.push(validDirs[0]);
+        } else {
+            // multiple options → apply branchChance but guarantee at least one survives
+            const guaranteed = validDirs[Shared.getRandomInt(0, validDirs.length - 1)];
+            newBranches.push(guaranteed); // always keep one
+
+            for (const branch of validDirs) {
+                if (branch === guaranteed) continue; // skip the guaranteed one
+                if (Shared.branchChance(branchProba)) newBranches.push(branch);
+                else stuckDirs.push(branch.dir);
+            }
         }
+
+        for (const stuck of stuckDirs) placeWallIfNoAdjacentFloor(currx, currz, stuck);
+        // for (const stuck of stuckDirs) placeWall(x,z,stuckdir);
+        return newBranches;
+        // for (const {newdir,nx,nz} of newdirections) {
+        //     carve(nx,nz,newdir)
+        // }
     }
 
     //place a couple rooms
-    // const numrooms = 8;
-    // const sizeroomx = 8;
-    // const sizeroomz = 8;
-    // for (let r = 0; r < numrooms; r++) {
-    //     const brx = Shared.getRandomInt(minX, maxX);
-    //     const brz = Shared.getRandomInt(minZ, maxZ);
-    //     const tlx = brx + Shared.getRandomInt(2, sizeroomx);
-    //     const tlz = brz + Shared.getRandomInt(2, sizeroomz);
-    //     for (let x = brx; x < tlx; x++) {
-    //         for (let z = brz; z < tlz; z++) {
-    //             placeFloor(x, z);
-    //         }
-    //     }
-    // }
+    const numrooms = 3;
+    const roomHasDoor = [];
+    const sizeroomx = 8;
+    const sizeroomz = 8;
+    for (let r = 0; r < numrooms; r++) {
+        roomHasDoor.push(false);
+        const brx = Shared.getRandomInt(minX, maxX);
+        const brz = Shared.getRandomInt(minZ, maxZ);
+        const tlx = brx + Shared.getRandomInt(2, sizeroomx);
+        const tlz = brz + Shared.getRandomInt(2, sizeroomz);
+        for (let x = brx; x < tlx; x++) {
+            for (let z = brz; z < tlz; z++) {
+                // placeFloor(x, z);
+                mark(x,0,z,"floor",true);
+                mark(x,0,z,"room",true);
+                mark(x,0,z,"roomid",roomHasDoor.length-1);
+            }
+        }
+    }
+    //add walls around rooms
+    for (const [key, cell] of mazeGridMap.entries()) {
+        const { x, y, z } = Shared.parseGridKey(key);
+        const { floor, north, south, west, east, room } = cell;
+        if (floor){
+            const fnorth = mazeGridMap.has(Shared.getGridKey(x,y,z-1));
+            const fsouth = mazeGridMap.has(Shared.getGridKey(x,y,z+1));
+            const feast  = mazeGridMap.has(Shared.getGridKey(x+1,y,z));
+            const fwest  = mazeGridMap.has(Shared.getGridKey(x-1,y,z));
+            if (!fnorth) placeWall(x,z,"north");
+            if (!fsouth) placeWall(x,z,"south");
+            if (!feast) placeWall(x,z,"east");
+            if (!fwest) placeWall(x,z,"west");
+        }
+    }
 
-    carve(0, 0, "north"); // Start in the center
+    //create maze around rooms
+    const frontier = [{ x: 0, z: 0, dir: "north" }];
+    while (frontier.length > 0) {
+        // pick random frontier branch
+        const idx = Shared.getRandomInt(0, frontier.length - 1);
+        const { x, z, dir } = frontier.splice(idx, 1)[0];
+        const newBranches = carveStep(x, z, dir);
+        frontier.push(...newBranches);
+    }
+
+    //leave at least one entry to each room
+    for (const [key, cell] of mazeGridMap.entries()) {
+        const { x, y, z } = Shared.parseGridKey(key);
+        const { floor, north, south, west, east, room, roomid } = cell;
+        if (room && !roomHasDoor[roomid] && (north || south || west || east)){
+            if (north && mazeGridMap.has(Shared.getGridKey(x, 0, z-1))) {cell.north = false; roomHasDoor[roomid]=true; continue;}
+            if (south && mazeGridMap.has(Shared.getGridKey(x, 0, z+1))) {cell.south = false; roomHasDoor[roomid]=true;continue;}
+            if (east && mazeGridMap.has(Shared.getGridKey(x+1, 0, z)))  {cell.east = false; roomHasDoor[roomid]=true;continue;}
+            if (west && mazeGridMap.has(Shared.getGridKey(x-1, 0, z)))  {cell.west = false; roomHasDoor[roomid]=true;continue;}
+        }
+    }
+
 
     //now parse mazegridmap to build the walls and floors
     for (const [key, cell] of mazeGridMap.entries()) {
         const { x, y, z } = Shared.parseGridKey(key);
-        const { floor, north, south, west, east } = cell;
-        if (floor) placeTile(x, y, z, "XZ", mazeFloorUvMeshId, "Plane", false, false);
+        const { floor, north, south, west, east, room } = cell;
+        if (floor) {
+            placeTile(x, 0, z, "XZ", mazeFloorUvMeshId, false, false);
+            // placeTile(x, maxY, z, "XZ", mazeFloorUvMeshId, false, false);
+        }
         for (let y = 0; y <= maxY; y++) {
-            placeTile(x,y,z,"XZ",pillaruvmeshid,"ArchBase",false,false);
-            if (north) placeTile(x, y, z, "XY", mazeWallUvMeshId, "Plane", false, false);
-            if (south) placeTile(x, y, z + 1, "XY", mazeWallUvMeshId, "Plane", false, false);
-            if (west) placeTile(x, y, z, "YZ", mazeWallUvMeshId, "Plane", false, false);
-            if (east) placeTile(x + 1, y, z, "YZ", mazeWallUvMeshId, "Plane", false, false);
+            if (!room) placeTile(x,y,z,"XZ",pillaruvmeshid,false,false);
+            if (north) placeTile(x, y, z, "XY", mazeWallUvMeshId, false, false);
+            if (south) placeTile(x, y, z + 1, "XY", mazeWallUvMeshId, false, false);
+            if (west) placeTile(x, y, z, "YZ", mazeWallUvMeshId, false, false);
+            if (east) placeTile(x + 1, y, z, "YZ", mazeWallUvMeshId, false, false);
         }
     }
 
+}
+
+function shuffle(array){
+    // make a shallow copy so we don’t mutate the original
+    const arr = array.slice();
+
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Shared.getRandomInt(0, i); // using your seeded RNG
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+
+    return arr;
 }
