@@ -25,16 +25,17 @@ export function setSeed(newSeed) {
     rng = seedrandom(newSeed);
 }
 
-// Function to generate a random position between min and max using rng()
+// Function to generate a random float position between min and max using rng()
 export function getRandom(min, max) {
-    const r= rng() * (max - min) + min; // Random number between min and max
-    console.log("getRandom",r)
-    return r;
+    return rng() * (max - min) + min;
+    // const _rng = rng();
+    // console.log(_rng);
+    // return _rng * (max - min) + min;
 }
 
-// Random integer between min and max (inclusive)
+// Random int in [min, max] inclusive
 export function getRandomInt(min, max) {
-    return Math.floor(rng() * (max - min + 1)) + min;
+    return Math.floor(getRandom(min, max + 1));
 }
 
 export function branchChance(p) {
@@ -78,7 +79,8 @@ export const MODEGAME = 2;
 
 // ambient light in editor and game mode
 export const AMBIENTLIGHTEDITCOLOR =new THREE.Color(1, 1, 1).multiplyScalar(0.45);
-export const AMBIENTLIGHTGAMECOLOR =new THREE.Color(0, 0, 1).multiplyScalar(0.10);
+// export const AMBIENTLIGHTGAMECOLOR =new THREE.Color(0, 0, 1).multiplyScalar(0.10);
+export const AMBIENTLIGHTGAMECOLOR =new THREE.Color(0.5, 0.5, 1).multiplyScalar(0.30);
 
 // editor variables
 export const editorState = {
