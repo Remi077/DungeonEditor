@@ -178,15 +178,31 @@
             padding: 10px;
         }
 
+        /* .form-row {
+            display: grid;
+            grid-template-columns: 130px 1fr; 
+            align-items: center;
+            gap: 0.5rem;
+        }
+            */
+
+        /* .form-row .inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr; 
+            gap: 0.5rem;
+        } */
+
         .form-row {
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            padding: 2px;
         }
 
         .form-row label {
-            min-width: 90px; /* keeps labels aligned */
+            min-width: 100px; /* keeps labels aligned */
         }        
+
 
         button {
             padding: 10px;
@@ -329,11 +345,11 @@
                     </div>
                     <div class="form-row">
                         <label for="MazeSize">Maze size:</label>
-                        <input type="number" id="MazeSize" value="5" />
+                        <input type="number" id="MazeSize" value="5" min="2" />
                     </div>
                     <div class="form-row">
                         <label for="MazeHeight">Maze height:</label>
-                        <input type="number" id="MazeHeight" value="2" />
+                        <input type="number" id="MazeHeight" value="2" min="0" />
                     </div>
                     <div class="form-row">
                         <label for="mazewallSelect">Walls:</label>
@@ -346,6 +362,17 @@
                         <button id="mazefloorSelectBtn">
                             <canvas id="mazefloorPreviewCanvas" width="64" height="64"></canvas>
                         </button>                        
+                    </div>
+                    <div class="form-row">
+                        <label for="MazeSecLMin">Corridor length min/max:</label>
+                        <!-- <div class="inputs"> -->
+                            <input type="number" id="MazeSecLMin" value="2" min="2" max="10" />
+                            <input type="number" id="MazeSecLMax" value="5" min="2" max="10" />
+                        <!-- </div> -->
+                    </div>
+                    <div class="form-row">
+                        <label for="MazeBranchProba">branch proba:</label>
+                        <input type="number" id="MazeBranchProba" value="50" min="0" max="100" />
                     </div>
                 </div>
             </div>
