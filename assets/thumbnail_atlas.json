@@ -43,11 +43,11 @@
       "x": 3,
       "y": 1
     },
-    "RoundPillar": {
+    "PillarRound": {
       "x": 4,
       "y": 1
     },
-    "RoundPillarBase": {
+    "PillarRoundBase": {
       "x": 5,
       "y": 1
     },
@@ -125,6 +125,18 @@
     },
     "ArchBigRight": {
       "x": 0,
+      "y": 5
+    },
+    "Door": {
+      "x": 1,
+      "y": 5
+    },
+    "Torch": {
+      "x": 2,
+      "y": 5
+    },
+    "Torch002": {
+      "x": 3,
       "y": 5
     }
   }
