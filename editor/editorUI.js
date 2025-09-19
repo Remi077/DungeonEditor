@@ -104,6 +104,7 @@ document.addEventListener("pointerlockchange", () => {
     } else {
         // Shared.editorState.pause = true;
         Shared.setPause(true);
+        Shared.resetAllActions();
         console.log("Pointer unlocked");
         document.getElementById('crosshair').style.display = 'none';
         document.getElementById('pointer-lock-hint').style.display = 'none';
