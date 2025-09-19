@@ -11,6 +11,7 @@ import {mergeBufferGeometries} from '../utils/BufferGeometryUtils.js';
 // addition modes
 export const ADDPLANEMODE = 0;
 export const ADDLIGHTMODE = 1;
+// export const ADDGAMEPMODE = 2;
 export const ADDRANDMODE = 2;
 export const NUMADDMODES = 3;
 
@@ -110,6 +111,7 @@ export let ActionToKeyMap = {
     moveCamBack    : { key: 'KeyS' },
     setAddPlaneMode: { key: 'Digit1', OnPress: true },
     setAddLightMode: { key: 'Digit2', OnPress: true },
+    // setAddGamepMode: { key: 'Digit3', OnPress: true },
     setAddRandMode : { key: 'Digit3', OnPress: true },
     pause          : { key: 'KeyP', OnRelease: true },   //triggered once only at release
       // prevMaterial: { key: 'KeyQ', OnPress: true },
@@ -120,8 +122,10 @@ export let ActionToKeyMap = {
     selectMesh  : { key: 'Tab', OnPress: true },
     nextMesh    : { key: 'KeyC', OnPress: true },
     prevMesh    : { key: 'KeyZ', OnPress: true },
-    saveLevel   : { key: 'KeyT', OnPress: true },
-    loadLevel   : { key: 'KeyL', OnPress: true },
+    // saveLevel   : { key: 'KeyT', OnPress: true },
+    saveLevel   : { key: 'Ctrl+KeyS', OnPress: true },
+    loadLevel   : { key: 'Ctrl+KeyL', OnPress: true },
+    resetLevel  : { key: 'Ctrl+KeyR', OnPress: true },
     startGame   : { key: 'KeyG', OnPress: true },
     nextMode    : { key: 'PageUp', OnPress: true },
     prevMode    : { key: 'PageDown', OnPress: true },
@@ -820,6 +824,9 @@ export function onMouseUp(event) {
                 reinitMarker();
                 break;
 
+            case ADDGAMEPMODE:
+                placeGamep();
+
             default:
                 return;
         }
@@ -959,9 +966,11 @@ function executePausableActions(delta) {
     if (Actions.setAddPlaneMode) {setAddMode(ADDPLANEMODE)};
     if (Actions.setAddLightMode) {setAddMode(ADDLIGHTMODE)};
     if (Actions.setAddRandMode) {setAddMode(ADDRANDMODE)};
-    if (Actions.setAddPlaneMode ||
-        Actions.setAddLightMode ||
-        Actions.setAddRandMode
+    // if (Actions.setAddGamepMode) {setAddMode(ADDGAMEPMODE)};
+    if (Actions.setAddPlaneMode
+        || Actions.setAddLightMode
+        || Actions.setAddRandMode
+        // || Actions.setAddGamepMode
     ) {
         const event = new CustomEvent("UIChange", {
             detail: { field: "modeChange", value: currentAddMode },
@@ -984,6 +993,7 @@ function executePausableActions(delta) {
         if (Actions.prevMesh) prevMesh();
         if (Actions.saveLevel) saveLevel();
         if (Actions.loadLevel) loadLevel();
+        if (Actions.resetLevel) resetLevel();
         // if (Actions.startGame) toggleGameMode();
         if (Actions.undo) undo();
         if (Actions.showXZ) setWallMode(MODEXZ);
@@ -1046,6 +1056,11 @@ function editorLoop() {
                     floorRaycast();
                     updateLightMarker();
                 break;
+            // case ADDGAMEPMODE:
+            //         //raycast against the floor
+            //         floorRaycast();
+            //         //maintain a group of marker tiles that show the current add selection
+            //         // updateGamepMarker();
             default:
                 break;
     }
@@ -1492,6 +1507,16 @@ export function setAddMode(mode) {
             // lightMarkerHelper.visible=true;
             Shared.editorState.renderOneFrame = true;
             break;
+        // case ADDGAMEPMODE:
+        //     currentAddMode = ADDGAMEPMODE;
+        //     setEraser(false);
+        //     markergroupxz.visible = false;
+        //     markergroupyz.visible = false;
+        //     markergroupxy.visible = false;
+        //     lightMarkerGroup.visible=false;
+        //     // lightMarkerHelper.visible=true;
+        //     Shared.editorState.renderOneFrame = true;
+        //     break;
     }
 }
 
