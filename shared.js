@@ -360,7 +360,11 @@ export function onKeyDownEvent(event){
     else if (keyPressOnceToActionMap[eventcode])
         Actions[keyPressOnceToActionMap[eventcode]] = !keys[eventcode];
 
-    if (eventcode === "Tab") {
+    if (eventcode === "Tab" 
+        || eventcode === "Ctrl+KeyS"
+        || eventcode === "Ctrl+KeyR"
+        || eventcode === "Ctrl+KeyA"
+    ) {
         event.preventDefault(); // stop browser from changing focus
     }
 
@@ -399,6 +403,15 @@ export function releaseSingleEventActions() {
                     Actions[action] = false
                 }
         }
+    }
+}
+
+/*---------------------------------*/
+// resetAllActions
+/*---------------------------------*/
+export function resetAllActions(){
+    for (const [action, ] of Object.entries(Actions)) {
+        Actions[action] = false
     }
 }
 
