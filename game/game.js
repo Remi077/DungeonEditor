@@ -50,6 +50,7 @@ export let ActionToKeyMap = {
 // startGameLoop
 /*---------------------------------*/
 export function startGameLoop() {
+    Shared.resetAllActions();
     Shared.editorState.gameRunning = true;
     // Shared.editorState.pause = false;
     Shared.setPause(false);
