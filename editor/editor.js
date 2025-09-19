@@ -375,7 +375,7 @@ export function startEditorLoop() {
 
     //back to addmode
     setAddMode(ADDPLANEMODE);//by default
-}
+}   
 
 /*---------------------------------*/
 // stopEditorLoop
@@ -2013,19 +2013,47 @@ function groupLights() {
 }
 
 /*---------------------------------*/
-// downloadJson
+// saveFile helper
 /*---------------------------------*/
-function downloadJson(data, filename) {
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
+async function saveFile(blob, suggestedName, mimeType) {
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName,
+                types: [
+                    {
+                        description: mimeType,
+                        accept: { [mimeType]: [`.${suggestedName.split('.').pop()}`] }
+                    }
+                ]
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return;
+        } catch (err) {
+            console.warn("Save cancelled or failed:", err);
+            return; // don’t fallback if the user cancels
+        }
+    }
 
+    // Fallback for browsers without FS API
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = filename;
+    link.download = suggestedName;
     link.click();
-
     URL.revokeObjectURL(url);
 }
+
+/*---------------------------------*/
+// downloadJson (refactored)
+/*---------------------------------*/
+async function downloadJson(data, filename = "data.json") {
+    const blob = new Blob([data], { type: "application/json" });
+    await saveFile(blob, filename, "application/json");
+}
+
 
 function generateDefaultGeometry(){
     return generateGeometry(0,0);
