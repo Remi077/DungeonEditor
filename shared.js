@@ -259,20 +259,24 @@ export function setMode(mode) {
         case MODEGAME:
             StartBtn.textContent = "Stop Game";
             stopEditorLoop();
+            stopEditorUI();
             ActionToKeyMap = gameActionToKeyMap;
             Actions = GameActions;
             // Actions = {};
             generateKeyToActionMaps();
             startGameLoop();
+            startGameLoopUI();
             break;
         case MODEEDITOR:
             StartBtn.textContent = "Start Game (G)";
             stopGameLoop();
+            stopGameLoopUI();
             ActionToKeyMap = editorActionToKeyMap;
             Actions = EditorActions;
             // Actions = {};
             generateKeyToActionMaps();
             startEditorLoop();
+            startEditorUI();
             editorState.renderOneFrame = true;
             break;
     }
@@ -284,6 +288,51 @@ export function setMode(mode) {
     });
     document.dispatchEvent(cevent);
 }
+
+
+
+let onMouseDown, onMouseUp;
+
+function startEditorUI() {
+    console.log("startEditorUI");
+
+    // Lock on right mouse button down
+    onMouseDown = (e) => {
+        if (e.button === 2 && document.pointerLockElement !== canvas) {
+            canvas.requestPointerLock();
+            setRightMouseDown(true);
+        }
+    };
+    canvas.addEventListener("mousedown", onMouseDown);
+
+    // Unlock on right mouse button up
+    onMouseUp = (e) => {
+        if (e.button === 2 && document.pointerLockElement === canvas) {
+            document.exitPointerLock();
+            setRightMouseDown(false);
+        }
+    };
+    document.addEventListener("mouseup", onMouseUp);
+
+    document.addEventListener("mousemove", onMouseMoveEditor, false);
+
+}
+
+function stopEditorUI() {
+    if (onMouseDown) canvas.removeEventListener("mousedown", onMouseDown);
+    if (onMouseUp) document.removeEventListener("mouseup", onMouseUp);
+    document.removeEventListener("mousemove", onMouseMoveEditor, false);
+}
+
+function startGameLoopUI(){
+    canvas.requestPointerLock();
+    document.addEventListener("mousemove", onMouseMoveGame, false);
+}
+function stopGameLoopUI(){
+    document.exitPointerLock();
+    document.removeEventListener("mousemove", onMouseMoveGame, false);
+}
+
 
 /*---------------------------------*/
 // doPause
@@ -362,6 +411,7 @@ export function onKeyDownEvent(event){
 
     if (eventcode === "Tab" 
         || eventcode === "Ctrl+KeyS"
+        || eventcode === "Ctrl+KeyL"
         || eventcode === "Ctrl+KeyR"
         || eventcode === "Ctrl+KeyA"
     ) {
@@ -485,7 +535,47 @@ export function createLight(pos, range = 100, intensity = 1, color = 0xffffff, h
 /*---------------------------------*/
 // onMouseMove
 /*---------------------------------*/
-export function onMouseMove(event) {
+export let isMouseOverCanvas = false;
+export function setIsMouseOverCanvas(val) { isMouseOverCanvas = val; }
+export function getIsMouseOverCanvas() { return isMouseOverCanvas; }
+export const mouse = new THREE.Vector2();
+export function getMouse() {return mouse;}
+export let rightMouseDown = false;
+export function setRightMouseDown(val) { rightMouseDown = val; }
+
+export function onMouseMoveEditor(event) {
+
+    console.log("onMouseMove");
+
+    if (!isMouseOverCanvas) return;
+    if (rightMouseDown) {
+        const dx = event.movementX;
+        const dy = event.movementY;
+
+        // Use dx and dy to rotate camera/player
+        //   console.log("Mouse moved:", dx, dy);
+
+        const sensitivity = 0.002;
+
+        yawObject.rotation.y -= event.movementX * sensitivity;  // Y-axis (left/right)
+        pitchObject.rotation.x -= event.movementY * sensitivity; // X-axis (up/down)
+
+        // Clamp pitch to prevent flipping
+        const maxPitch = Math.PI / 2;
+        pitchObject.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, pitchObject.rotation.x));
+
+    } else {
+
+        //store mouse coordinates on screen
+        const rect = canvas.getBoundingClientRect();
+
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        // console.log("mouse",mouse);
+    }
+}
+
+export function onMouseMoveGame(event) {
     const dx = event.movementX;
     const dy = event.movementY;
 
@@ -500,8 +590,8 @@ export function onMouseMove(event) {
     // Clamp pitch to prevent flipping
     const maxPitch = Math.PI / 2;
     pitchObject.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, pitchObject.rotation.x));
-
 }
+
 
 /*---------------------------------*/
 // setWallHeight
