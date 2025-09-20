@@ -89,31 +89,76 @@ floorHeightSelect.addEventListener("change", (event) => {
 document.addEventListener("contextmenu", (e) => e.preventDefault()); // prevent browser menu
 
 // Shared.editorState.pause = true; //start paused
+// document.addEventListener("pointerlockchange", () => {
+//     if (document.pointerLockElement === Shared.canvas) {
+//         // Shared.editorState.pause = false;
+//         Shared.setPause(false);
+//         console.log("Pointer locked");
+//         document.getElementById('crosshair').style.display = 'block';
+//         document.getElementById('pointer-lock-hint').style.display = 'block';
+//         document.addEventListener("mousemove", Shared.onMouseMove, false);
+//         document.addEventListener("mousedown", Editor.onMouseClick, false);
+//         document.addEventListener("mouseup", Editor.onMouseUp, false);
+//         document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
+//         closePopup();
+//     } else {
+//         // Shared.editorState.pause = true;
+//         Shared.setPause(true);
+//         Shared.resetAllActions();
+//         console.log("Pointer unlocked");
+//         document.getElementById('crosshair').style.display = 'none';
+//         document.getElementById('pointer-lock-hint').style.display = 'none';
+//         document.removeEventListener("mousemove", Shared.onMouseMove, false);
+//         document.removeEventListener("mousedown", Editor.onMouseClick, false);
+//         document.removeEventListener("mouseup", Editor.onMouseUp, false);
+//         document.removeEventListener("wheel", Editor.onMouseWheel, false);
+//     }
+// });
+
+
+// document.getElementById('pointer-lock-hint').style.display = 'block';
+document.addEventListener("mousedown", Editor.onMouseClick, false);
+document.addEventListener("mouseup", Editor.onMouseUp, false);
+document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
+
+const crosshair = document.getElementById("crosshair");
 document.addEventListener("pointerlockchange", () => {
     if (document.pointerLockElement === Shared.canvas) {
-        // Shared.editorState.pause = false;
-        Shared.setPause(false);
         console.log("Pointer locked");
-        document.getElementById('crosshair').style.display = 'block';
-        document.getElementById('pointer-lock-hint').style.display = 'block';
-        document.addEventListener("mousemove", Shared.onMouseMove, false);
-        document.addEventListener("mousedown", Editor.onMouseClick, false);
-        document.addEventListener("mouseup", Editor.onMouseUp, false);
-        document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
-        closePopup();
+
+        // Shared.canvas.removeEventListener("mousemove", crossHairFollow);
+        // --- Locked mode: fixed at center ---
+        crosshair.style.display = "block";
+        crosshair.style.position = "absolute";
+        crosshair.style.top = "50%";
+        crosshair.style.left = "50%";
+        crosshair.style.transform = "translate(-50%, -50%)";
+
+        // document.addEventListener("mousemove", Shared.onMouseMove, false);
     } else {
-        // Shared.editorState.pause = true;
-        Shared.setPause(true);
-        Shared.resetAllActions();
         console.log("Pointer unlocked");
-        document.getElementById('crosshair').style.display = 'none';
-        document.getElementById('pointer-lock-hint').style.display = 'none';
-        document.removeEventListener("mousemove", Shared.onMouseMove, false);
-        document.removeEventListener("mousedown", Editor.onMouseClick, false);
-        document.removeEventListener("mouseup", Editor.onMouseUp, false);
-        document.removeEventListener("wheel", Editor.onMouseWheel, false);
+        Shared.resetAllActions();
+        crosshair.style.display = "none";
+        // Shared.canvas.addEventListener("mousemove", crossHairFollow);
+        // document.getElementById('crosshair').style.display = 'none';
+        // document.removeEventListener("mousemove", Shared.onMouseMove, false);
     }
 });
+
+
+function crossHairFollow(e){
+    if (document.pointerLockElement !== Shared.canvas) {
+        const rect = Shared.canvas.getBoundingClientRect();
+
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        crosshair.style.position = "absolute";
+        crosshair.style.left = `${x}px`;
+        crosshair.style.top = `${y}px`;
+        crosshair.style.transform = "translate(-50%, -50%)";
+    }
+}
 
 // function onMouseUp(event){
 //     Editor.onMouseUp(event);
@@ -138,12 +183,28 @@ document.addEventListener("pointerlockchange", () => {
 /*-----------------------------------------------------*/
 // GAMEPLAY GLOBAL VARIABLES
 /*-----------------------------------------------------*/
-Shared.canvas.addEventListener("click", () => {
-    if (document.pointerLockElement !== Shared.canvas) {
-        Shared.canvas.requestPointerLock(); // First click: lock pointer
-    }
+// Shared.canvas.addEventListener("click", (e) => {
+//     if (document.pointerLockElement !== Shared.canvas) {
+//         if (e.button == 2)
+//             Shared.canvas.requestPointerLock(); // First click: lock pointer
+//     }
+// });
+
+// Prevent default right-click menu
+Shared.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/*---------------------------------*/
+// Track hover state
+/*---------------------------------*/
+Shared.canvas.addEventListener("mouseenter", () => {
+    console.log("mouseenter");
+    Shared.setIsMouseOverCanvas(true);
 });
 
+Shared.canvas.addEventListener("mouseleave", () => {
+    console.log("mouseleave");
+    Shared.setIsMouseOverCanvas(false);
+});
 
 /*-----------------------------------------------------*/
 // WINDOW RESIZE
@@ -454,7 +515,7 @@ function setupPopup(thiscanvas,thisimage,thiscellsize,thisaction) {
         thisaction(index);
 
         closePopup();
-        Shared.canvas.requestPointerLock()
+        // Shared.canvas.requestPointerLock()
     });
 
     thiscanvas.addEventListener("mousemove", (e) => {
