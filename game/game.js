@@ -58,7 +58,7 @@ export function startGameLoop() {
     // Shared.resetCamera();
     Shared.clock.start();
     Shared.ambientLight.color.set(Shared.AMBIENTLIGHTGAMECOLOR);
-
+    verticalSpeed = 0;
 }
 
 /*---------------------------------*/
