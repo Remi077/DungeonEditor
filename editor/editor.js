@@ -109,17 +109,18 @@ export let ActionToKeyMap = {
     moveCamLeft    : { key: 'KeyA' },
     moveCamFront   : { key: 'KeyW' },
     moveCamBack    : { key: 'KeyS' },
-    setAddPlaneMode: { key: 'Digit1', OnPress: true },
-    setAddLightMode: { key: 'Digit2', OnPress: true },
+    // setAddPlaneMode: { key: 'Digit1', OnPress: true },
+    // setAddLightMode: { key: 'Digit2', OnPress: true },
     // setAddGamepMode: { key: 'Digit3', OnPress: true },
-    setAddRandMode : { key: 'Digit3', OnPress: true },
-    pause          : { key: 'KeyP', OnRelease: true },   //triggered once only at release
+    // setAddRandMode : { key: 'Digit3', OnPress: true },
+    // pause          : { key: 'KeyP', OnRelease: true },   //triggered once only at release
       // prevMaterial: { key: 'KeyQ', OnPress: true },
       // nextMaterial: { key: 'KeyE', OnPress: true },
-    nextWall    : { key: 'KeyQ', OnPress: true },
-    prevWall    : { key: 'KeyE', OnPress: true },
+    // nextWall    : { key: 'KeyQ', OnPress: true },
+    // prevWall    : { key: 'KeyE', OnPress: true },
     toggleEraser: { key: 'KeyR', OnPress: true },
     selectMesh  : { key: 'Tab', OnPress: true },
+    selectTex   : { key: 'KeyT', OnPress: true },
     nextMesh    : { key: 'KeyC', OnPress: true },
     prevMesh    : { key: 'KeyZ', OnPress: true },
     // saveLevel   : { key: 'KeyT', OnPress: true },
@@ -130,11 +131,11 @@ export let ActionToKeyMap = {
     nextMode    : { key: 'PageUp', OnPress: true },
     prevMode    : { key: 'PageDown', OnPress: true },
     undo        : { key: 'Ctrl+KeyZ', OnPress: true },
-      // showXZ      : { key: 'Digit1', OnPress: true },
-      // showYZ      : { key: 'Digit2', OnPress: true },
-      // showXY      : { key: 'Digit3', OnPress: true },
-      // showW       : { key: 'Digit4', OnPress: true },
-      // showA       : { key: 'Digit5', OnPress: true },
+    showXZ      : { key: 'Digit1', OnPress: true },
+    showYZ      : { key: 'Digit2', OnPress: true },
+    showXY      : { key: 'Digit3', OnPress: true },
+    showW       : { key: 'Digit4', OnPress: true },
+    showA       : { key: 'Digit5', OnPress: true },
 };
 
 /*-----------------------------------------------------*/
@@ -328,7 +329,13 @@ export function setupEditor() {
     Shared.scene.add(Shared.chunksGroup);
 
     //start in add plane mode
-    setAddMode(ADDPLANEMODE);
+    //expand add plane
+    const event = new CustomEvent("UIChange", {
+        detail: { field: "modeChange", value: ADDPLANEMODE },
+        bubbles: true // optional, allows event to bubble up
+    });
+    document.dispatchEvent(event);    
+    // setAddMode(ADDPLANEMODE);
     setWallMode(MODEA);
     setMaterial(0);
     // setMeshFromMeshName("Plane");
@@ -724,7 +731,8 @@ function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
 /*---------------------------------*/
 export function onMouseClick(event) {
 
-    if (!Shared.editorState.editorRunning) return;
+    if (!Shared.editorState.editorRunning || !Shared.getIsMouseOverCanvas()) return;
+    // console.log("mouseclick");
 
     if (event.button == 0) {
 
@@ -774,7 +782,9 @@ export function onMouseClick(event) {
 /*---------------------------------*/
 export function onMouseUp(event) {
 
-    if (!Shared.editorState.editorRunning) return;
+    if (!Shared.editorState.editorRunning || !Shared.getIsMouseOverCanvas()) return;
+
+    console.log("mouseup");
 
     if (event.button == 0) {
 
@@ -824,21 +834,24 @@ export function onMouseUp(event) {
                 reinitMarker();
                 break;
 
-            case ADDGAMEPMODE:
-                placeGamep();
+            // case ADDGAMEPMODE:
+            //     placeGamep();
 
             default:
                 return;
         }
-    } else if (event.button == 2) {
-        let popup;
-        if (event.altKey) {
-            openPopup(Shared.meshpopup)
-        } else {
-            openPopup(Shared.matpopup)
-        }
+    } //else if (event.button == 2) {
 
-    }
+
+
+        // let popup;
+        // if (event.altKey) {
+        //     openPopup(Shared.meshpopup)
+        // } else {
+        //     openPopup(Shared.matpopup)
+        // }
+
+    //}
 
 }
 
@@ -989,6 +1002,7 @@ function executePausableActions(delta) {
         if (Actions.prevWall) prevWall();
         if (Actions.toggleEraser) toggleEraser();
         if (Actions.selectMesh) openPopup(Shared.meshpopup);
+        if (Actions.selectTex) openPopup(Shared.matpopup);
         if (Actions.nextMesh) nextMesh();
         if (Actions.prevMesh) prevMesh();
         if (Actions.saveLevel) saveLevel();
@@ -1028,7 +1042,11 @@ function editorLoop() {
     GameHUD.drawHUD();
     executeUnpausableActions(deltaTime);
 
-    if (!Shared.editorState.pause || Shared.editorState.renderOneFrame) {
+    // if (!Shared.editorState.pause || Shared.editorState.renderOneFrame) {
+    // if (true) {
+    if (Shared.getIsMouseOverCanvas()) {
+
+        // console.log("incanvas");
 
         //clear that flag
         Shared.editorState.renderOneFrame = false;
@@ -1130,7 +1148,9 @@ function highlightMeshToDelete(){
     raycastChunkArray = Object.values(chunksInScene);
 
     //perform the raycast
-    raycaster.setFromCamera(screenCenter, Shared.camera);
+    const mouse = Shared.getMouse();
+    // raycaster.setFromCamera(screenCenter, Shared.camera);
+    raycaster.setFromCamera(mouse, Shared.camera);
     let doesIntersect = false;
     const hits = raycaster.intersectObjects(raycastChunkArray, false);
 
@@ -1203,7 +1223,10 @@ function highlightMeshToDelete(){
 function floorRaycast() {
 
     //FLOOR RAYCAST TEST
-    raycaster.setFromCamera(screenCenter, Shared.camera);
+    const mouse = Shared.getMouse();
+    // console.log("mouse",mouse);
+    raycaster.setFromCamera(mouse, Shared.camera);
+    // raycaster.setFromCamera(screenCenter, Shared.camera);
     const intersects = raycaster.intersectObject(floor);
 
     selectValid = false;
@@ -1221,6 +1244,7 @@ function floorRaycast() {
         selectX = Math.floor(point.x / Shared.cellSize);
         selectY = Shared.floorHeight;
         selectZ = Math.floor(point.z / Shared.cellSize);
+        // console.log(selectX,selectZ)
     }
 
 }
