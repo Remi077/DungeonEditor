@@ -51,9 +51,9 @@
 
         #crosshair {
             position: absolute;
-            top: 50%;
+            /* top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translate(-50%, -50%); */
             color: white;
             font-size: 24px;
             pointer-events: none;
@@ -92,6 +92,7 @@
             display: block;
             max-width: none;   
             height: auto;
+            /* cursor: none;  */
         }
 
         /* HUD canvas stays on top */
@@ -268,7 +269,7 @@
         <div id="canvas-container">
             <canvas id="three-canvas" tabindex="0"></canvas>
             <div id="crosshair">+</div>
-            <div id="pointer-lock-hint">Press ESC to release the mouse</div>
+            <!-- <div id="pointer-lock-hint">Press ESC to release the mouse</div> -->
             <canvas id="hud-canvas"></canvas>
 
             <!-- POPUPS -->
