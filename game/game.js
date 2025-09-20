@@ -55,7 +55,7 @@ export function startGameLoop() {
     // Shared.editorState.pause = false;
     Shared.setPause(false);
     gameId = requestAnimationFrame(gameLoop);
-    Shared.resetCamera();
+    // Shared.resetCamera();
     Shared.clock.start();
     Shared.ambientLight.color.set(Shared.AMBIENTLIGHTGAMECOLOR);
 
@@ -264,6 +264,17 @@ function jump(){
 // isTouchingGround
 /*---------------------------------*/
 function isTouchingGround() {
+    const posfeet=(Shared.yawObject.position.y-Shared.cameraOffsetY);
+    const posy = Math.floor(posfeet/Shared.cellSize);
+    const posx = Math.floor(Shared.yawObject.position.x/Shared.cellSize);
+    const posz = Math.floor(Shared.yawObject.position.z/Shared.cellSize);
+    const k = Shared.getGridKey(posx, posy, posz);
+    const thiscell = Shared.gridMap.XZ.get(k);
+    const thisCellIsPlane = ((thiscell && Object.keys(thiscell).some(key => key.startsWith("Plane"))));
+
+    if (!thisCellIsPlane) return false;
+    return ((posfeet%Shared.cellSize) < 0.1);
+    
     return (Shared.yawObject.position.y - groundLevel) < Shared.EPSILON;
 }
 
