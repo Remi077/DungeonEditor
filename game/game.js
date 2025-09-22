@@ -40,7 +40,7 @@ export let ActionToKeyMap = {
     moveCamRight   : { key: 'KeyD' },
     moveCamLeft    : { key: 'KeyA' },
     moveCamFront   : { key: 'KeyW' },
-    moveCamBack    : { key: 'KeyS' },
+    moveCamBack: { key: 'KeyS' },
     startGame      : { key: 'KeyG', OnPress: true },
     jump           : { key: 'Space', OnPress: true },
     interact       : { key: 'KeyE', OnPress: true },
