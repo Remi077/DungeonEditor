@@ -24,11 +24,32 @@ const MODEA = 4;
 const NUMMODES = 5;
 
 // rotation and offset per plane
-const RotOffsetPerSlice = {
-    XZ: { pos: new THREE.Vector3(0.5, 0, 0.5), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0, Math.PI, 0)) },
-    YZ: { pos: new THREE.Vector3(0, 0.5, 0.5), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, 0, Math.PI / 2)) },
-    XY: { pos: new THREE.Vector3(0.5, 0.5, 0), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)) }
-};
+// const RotOffsetPerSlice = {
+//     XZ: { pos: new THREE.Vector3(0.5, 0, 0.5), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0, Math.PI, 0)) },
+//     YZ: { pos: new THREE.Vector3(0, 0.5, 0.5), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, 0, Math.PI / 2)) },
+//     XY: { pos: new THREE.Vector3(0.5, 0.5, 0), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)) }
+// };
+
+function RotOffsetPerSlice(dir,rot){
+    const curRotRadians = rot*(Math.PI/2);
+    switch (dir) {
+        case "XZ":
+            return{
+                pos: new THREE.Vector3(0.5, 0, 0.5),
+                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0, Math.PI+curRotRadians, 0))
+            };
+        case "YZ":
+            return{
+                pos: new THREE.Vector3(0, 0.5, 0.5),
+                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2+curRotRadians, 0, Math.PI / 2))
+            };
+        case "XY":
+            return{
+                pos: new THREE.Vector3(0.5, 0.5, 0),
+                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, curRotRadians, 0))
+            };
+    }
+}
 
 /*-----------------------------------------------------*/
 // GAMEPLAY GLOBAL VARIABLES
@@ -54,6 +75,7 @@ let selectY             = 0;
 let selectZ             = 0;
 let prevSelectX         = 99999;
 let prevSelectZ         = 99999;
+let prevRot             = 0;
 let boxselectModestartX = 0;
 let boxselectModestartZ = 0;
 let boxselectModeendX   = 0;
@@ -118,6 +140,8 @@ export let ActionToKeyMap = {
       // nextMaterial: { key: 'KeyE', OnPress: true },
     // nextWall    : { key: 'KeyQ', OnPress: true },
     // prevWall    : { key: 'KeyE', OnPress: true },
+    rotLeft     : { key: 'KeyQ', OnPress: true },
+    rotRight    : { key: 'KeyE', OnPress: true },
     toggleEraser: { key: 'KeyR', OnPress: true },
     selectMesh  : { key: 'Tab', OnPress: true },
     selectTex   : { key: 'KeyT', OnPress: true },
@@ -514,7 +538,7 @@ function toggleMaterial(increment) {
 export function setMaterial(uvIndex){
     currentUVIndex = uvIndex;
     let currentName = Shared.atlasUVsArray[uvIndex][0];
-    setMesh(uvIndex,currentMeshIndex);
+    setMesh(currentRot,uvIndex,currentMeshIndex);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
         detail: { field: "MaterialChange", value: uvIndex },
@@ -563,7 +587,7 @@ function toggleMesh(increment){
 export function setMeshFromMeshindex(meshindex){
     currentMeshIndex = meshindex;
     // let currentName = Shared.atlasMeshArray[meshindex][0];
-    setMesh(currentUVIndex,meshindex);
+    setMesh(currentRot,currentUVIndex,meshindex);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
         detail: { field: "MeshChange", value: meshindex },
@@ -575,7 +599,7 @@ export function setMeshFromMeshindex(meshindex){
 export function setMeshFromMeshName(meshname){
     const meshindex = Shared.atlasMeshidx[meshname];
     currentMeshIndex = meshindex;
-    setMesh(currentUVIndex,meshindex);
+    setMesh(currentRot,currentUVIndex,meshindex);
     const event = new CustomEvent("UIChange", {
         detail: { field: "MeshChange", value: meshindex },
         bubbles: true // optional, allows event to bubble up
@@ -583,10 +607,10 @@ export function setMeshFromMeshName(meshname){
     document.dispatchEvent(event);
 }
 
-export function setMesh(uvid, meshid) {
+export function setMesh(rotid, uvid, meshid) {
 
     markerGeom.dispose();
-    markerGeom = generateGeometry(uvid,meshid);
+    markerGeom = generateGeometry(rotid,uvid,meshid);
 
     markerxz.geometry = markerGeom;
     markeryz.geometry = markerGeom;
@@ -663,7 +687,7 @@ function placeTileFromMesh(tilemesh, direction, erase=false) {
 function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
 
 
-    const { uvid, meshid } = Shared.decodeID(uvmeshid);
+    const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
     const meshname = Shared.atlasMeshArray[meshid][0];
 
     const undoitem = {
@@ -868,6 +892,7 @@ function openPopup(popup){
 // reinitMarker
 /*---------------------------------*/
 function reinitMarker() {
+
     //reinit marker
     //RED
     markergroupxz.clear();
@@ -1001,6 +1026,8 @@ function executePausableActions(delta) {
         if (Actions.nextWall) nextWall();
         if (Actions.prevWall) prevWall();
         if (Actions.toggleEraser) toggleEraser();
+        if (Actions.rotLeft) rotLeft();
+        if (Actions.rotRight) rotRight();
         if (Actions.selectMesh) openPopup(Shared.meshpopup);
         if (Actions.selectTex) openPopup(Shared.matpopup);
         if (Actions.nextMesh) nextMesh();
@@ -1183,14 +1210,19 @@ function highlightMeshToDelete(){
 
             prevSelectInfo = selectInfo;
 
-            if (Shared.sceneGeometryDict.has(selectInfo.uvmeshid)) {
-                selectObj = new THREE.Mesh(Shared.sceneGeometryDict.get(selectInfo.uvmeshid).clone(), markerremovematerial);
+            const { rotid, uvid, meshid } = Shared.decodeID(selectInfo.uvmeshid);
+            // const uvmeshidrot0 = Shared.encodeID(uvid,meshid);
+            const uvmeshidrot0 = selectInfo.uvmeshid; //TEMP: find a way to optimize this, ie only register
+            //unique geometries indepedently from rotation. pb is that this breaks save/load at the moment 
+            if (Shared.sceneGeometryDict.has(uvmeshidrot0)) {
+                selectObj = new THREE.Mesh(Shared.sceneGeometryDict.get(uvmeshidrot0).clone(), markerremovematerial);
             } else {
                 //should not go there normally but support it just in case
-                const { uvid, meshid } = Shared.decodeID(selectInfo.uvmeshid);
-                selectObj = generateGeometry(uvid, meshid);
+                // const { rotid, uvid, meshid } = Shared.decodeID(selectInfo.uvmeshid);
+                selectObj = generateGeometry(rotid, uvid, meshid);
             }
-            const { rot, pos: offset } = RotOffsetPerSlice[selectInfo.direction];
+            // const { rot, pos: offset } = RotOffsetPerSlice[selectInfo.direction];
+            const { rot, pos: offset } = RotOffsetPerSlice(selectInfo.direction,rotid);
             const { x, y, z } = Shared.parseGridKey(selectInfo.tilexyz);
             const selectObjPos = new THREE.Vector3();
             selectObjPos.set(
@@ -1266,6 +1298,7 @@ function updateMarker(){
         if (
             (selectX != prevSelectX) ||
             (selectZ != prevSelectZ) ||
+            (currentRot != prevRot)  ||
             wallModeSelect != prevWallModeSelect ||
             Shared.editorState.hasClicked
         ) {
@@ -1276,6 +1309,8 @@ function updateMarker(){
                 markergroupxz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
                 markergroupyz.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
                 markergroupxy.position.set(selectX * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), selectZ * Shared.cellSize);
+                
+                // markergroupxz.rotation.y=currentRot;
             } else {
 
                 //UPDATE SELECTION BBOX
@@ -1286,7 +1321,6 @@ function updateMarker(){
                 markergroupxz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
                 markergroupyz.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
                 markergroupxy.position.set(Math.min(boxselectModeendX, boxselectModestartX) * Shared.cellSize, (Shared.floorHeight * Shared.cellSize), Math.min(boxselectModeendZ, boxselectModestartZ) * Shared.cellSize);
-
 
                 //CLEAR MARKER MESHES
                 markergroupxz.clear();
@@ -1362,6 +1396,7 @@ function updateMarker(){
         //KEEP TRACK OF LAST SELECTED CELL
         prevSelectX = selectX;
         prevSelectZ = selectZ;
+        prevRot     = currentRot;
         prevWallModeSelect = wallModeSelect;
 
     } else {
@@ -1606,14 +1641,14 @@ async function loadPlanesIntoScene(jsondata) {
     // load the scene dictionary
     let geomdata;
     if ("GEOM" in jsondata) geomdata=jsondata["GEOM"];
-    if (geomdata.length % 4 !== 0) {
-        throw new Error("geomdata length must be a multiple of 4 (2 bytes per key).");
+    if (geomdata.length % Shared.uvmeshidHexWidth !== 0) {
+        throw new Error(`geomdata length must be a multiple of ${Shared.uvmeshidHexWidth}.`);
     }
-    for (let i = 0; i < geomdata.length; i += 4) {
-        const uvmeshid_ = geomdata.slice(i, i + 4); // 4 hex nibbles (16 bits)
-        const { uvid, meshid } = Shared.decodeID(uvmeshid_);
+    for (let i = 0; i < geomdata.length; i += Shared.uvmeshidHexWidth) {
+        const uvmeshid_ = geomdata.slice(i, i + Shared.uvmeshidHexWidth); // 5 hex nibbles (20 bits)
+        const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid_);
         //create the geometry for given uv+mesh and put it in the dict
-        const newgeom = generateGeometry(uvid,meshid);
+        const newgeom = generateGeometry(rotid,uvid,meshid);
         Shared.sceneGeometryDict.set(uvmeshid_,newgeom);
     }
     const sceneGeometryDictArray = Array.from(Shared.sceneGeometryDict.entries());
@@ -2080,13 +2115,13 @@ async function downloadJson(data, filename = "data.json") {
 
 
 function generateDefaultGeometry(){
-    return generateGeometry(0,0);
+    return generateGeometry(0,0,0);
 }
 
 /*---------------------------------*/
 // generateGeometry
 /*---------------------------------*/
-function generateGeometry(uvid,meshid) {
+function generateGeometry(rotid,uvid,meshid) {
     let m = (Shared.atlasMeshArray[meshid][1]?.geometry).clone();
     let uv = m.attributes.uv.clone();
 
@@ -2111,7 +2146,7 @@ function generateGeometry(uvid,meshid) {
 
     const newmeshname = Shared.atlasMeshArray[meshid][0];
     const newuvname = Shared.atlasUVsArray[uvid][0];
-    const newuvmeshid = Shared.encodeID(uvid,meshid);
+    const newuvmeshid = Shared.encodeID(uvid,meshid,rotid);
     m.userData = {
         uvname: newuvname,
         meshname: newmeshname,
@@ -2294,30 +2329,42 @@ function rebuildDirtyChunks() {
 
         for (const direction of ["XZ", "YZ", "XY"]) {
             const chunkslice = chunk[direction];
-            const { rot, pos: offset } = RotOffsetPerSlice[direction];
+            // const { rot, pos: offset } = RotOffsetPerSlice[direction];
+            // const { rot, pos: offset } = RotOffsetPerSlice(direction,0);
 
             for (const [tilexyz, tilemeshes] of chunkslice.entries()) {
                 const { x, y, z } = Shared.parseGridKey(tilexyz);
 
-                chunkpos.set(
-                    offset.x + Shared.cellSize * x,
-                    offset.y + Shared.cellSize * y,
-                    offset.z + Shared.cellSize * z
-                );
+                // chunkpos.set(
+                //     offset.x + Shared.cellSize * x,
+                //     offset.y + Shared.cellSize * y,
+                //     offset.z + Shared.cellSize * z
+                // );
 
-                chunkmatrix.copy(rot).setPosition(chunkpos);
+                // chunkmatrix.copy(rot).setPosition(chunkpos);
 
                 for (const uvmeshid of Object.values(tilemeshes)) {
+                    const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
+                    // const uvmeshidrot0 = Shared.encodeID(uvid,meshid);
+                    const uvmeshidrot0 = uvmeshid; //TEMP: find a way to optimize this, ie only register
+                    //unique geometries indepedently from rotation. pb is that this breaks save/load at the moment 
                     let newgeom;
                     //clone from cache if 
-                    if (Shared.sceneGeometryDict.has(uvmeshid)) {
-                        newgeom = Shared.sceneGeometryDict.get(uvmeshid).clone();
+                    if (Shared.sceneGeometryDict.has(uvmeshidrot0)) {
+                        newgeom = Shared.sceneGeometryDict.get(uvmeshidrot0).clone();
                     } else {
-                        const { uvid, meshid } = Shared.decodeID(uvmeshid);
-                        newgeom = generateGeometry(uvid, meshid);
-                        Shared.sceneGeometryDict.set(uvmeshid, newgeom.clone());
+                        // const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
+                        newgeom = generateGeometry(0, uvid, meshid);
+                        Shared.sceneGeometryDict.set(uvmeshidrot0, newgeom.clone());
                     }
 
+                    const { rot, pos: offset } = RotOffsetPerSlice(direction,rotid);
+                    chunkpos.set(
+                        offset.x + Shared.cellSize * x,
+                        offset.y + Shared.cellSize * y,
+                        offset.z + Shared.cellSize * z
+                    );
+                    chunkmatrix.copy(rot).setPosition(chunkpos);
                     newgeom.applyMatrix4(chunkmatrix);
 
                     // how many triangles does this tile contribute?
@@ -2409,7 +2456,7 @@ function buildMaze() {
 
     // const wooduvmeshid = getUvMeshId("FLOORBOARD", "Plane");
     // const walluvmeshid = getUvMeshId("WALL", "Plane");
-    const { uvid, meshid } = Shared.decodeID(mazeWallUvMeshId);
+    const { rotid, uvid, meshid } = Shared.decodeID(mazeWallUvMeshId);
     const matname = Shared.atlasUVsArray[uvid][0];
     const pillaruvmeshid = getUvMeshId(matname, "ArchBase");
     
@@ -2668,4 +2715,38 @@ function shuffle(array){
     }
 
     return arr;
+}
+
+let currentRot = 0;
+function rotLeft(){
+    // currentRot += 1;
+    // currentRot %= 4;
+    const newrot=(currentRot+1)%4;
+    const newRotRadians = newrot*(Math.PI/2);
+    markerxz.rotation.y=Math.PI+newRotRadians;
+    markeryz.rotation.x=-Math.PI/2+newRotRadians;
+    markerxy.rotation.y=newRotRadians;
+    setRotation(newrot);
+    reinitMarker();
+}
+function rotRight(){
+    const newrot=(currentRot+(4-1))%4;
+    const newRotRadians = newrot*(Math.PI/2);
+    markerxz.rotation.y=Math.PI+newRotRadians;
+    markeryz.rotation.x=-Math.PI/2+newRotRadians;
+    markerxy.rotation.y=newRotRadians;
+    setRotation(newrot);
+    reinitMarker();
+}
+
+function setRotation(rotid){
+    currentRot=rotid;
+    // let currentName = Shared.atlasMeshArray[meshindex][0];
+    setMesh(rotid,currentUVIndex,currentMeshIndex);
+    //notify the UI back to update the selected combobox
+    // const event = new CustomEvent("UIChange", {
+    //     detail: { field: "MeshChange", value: meshindex },
+    //     bubbles: true // optional, allows event to bubble up
+    // });
+    // document.dispatchEvent(event);
 }
