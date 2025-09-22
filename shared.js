@@ -108,6 +108,9 @@ export let atlasMeshArray      = [];
 export let atlasMeshidx        = {};
 export let uvidBits            = 8;          //default
 export let meshidBits          = 8;          //default
+export let rotationBits        = 4;          //default
+export let uvmeshidBits        = rotationBits + meshidBits + uvidBits;
+export let uvmeshidHexWidth    = uvmeshidBits/4;
 export const sceneGeometryDict = new Map();
 export let thumbDict           = {};         //thumbnail dictionary
 export let thumbDictUVsArray   = [];         //mesh array (from dictionary)
@@ -468,9 +471,13 @@ export function resetAllActions(){
 /*---------------------------------*/
 // encodeID
 /*---------------------------------*/
-export function encodeID(uvid, meshid) {
-    const encoded = ((uvid << meshidBits) | meshid) + 1; //0 is reserved to null
-    return encoded.toString(16).padStart(4, "0"); // hex string, always 4 hex digits
+//[ rotation | uvid | meshid ] 4 + 8 + 8 bits = 20 bits = 5 nibbles
+export function encodeID(uvid, meshid, rotation=0) {
+    const encoded =
+        ((rotation << (uvidBits + meshidBits)) |  // rotation at top
+         (uvid << meshidBits) |
+         meshid) + 1; // reserve 0, 0 is reserved to null
+    return encoded.toString(16).padStart(uvmeshidHexWidth, "0"); // use 5 hex digits (20 bits)
 }
 
 /*---------------------------------*/
@@ -481,10 +488,16 @@ export function decodeID(hexStr) {
     if (encoded === 0) return null; // reserved null
 
     const shifted = encoded - 1;
+
     const meshidMask = (1 << meshidBits) - 1;
-    const meshid = shifted & meshidMask;
-    const uvid   = shifted >> meshidBits;
-    return { uvid, meshid };
+    const uvidMask   = (1 << uvidBits) - 1;
+    const rotationMask = (1 << rotationBits) - 1;
+
+    const meshid   = shifted & meshidMask;
+    const uvid     = (shifted >> meshidBits) & uvidMask;
+    const rotid    = (shifted >> (uvidBits + meshidBits)) & rotationMask;
+
+    return { rotid, uvid, meshid };
 }
 
 /*---------------------------------*/
