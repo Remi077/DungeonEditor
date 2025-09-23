@@ -558,7 +558,7 @@ export function setRightMouseDown(val) { rightMouseDown = val; }
 
 export function onMouseMoveEditor(event) {
 
-    console.log("onMouseMove");
+    // console.log("onMouseMove");  
 
     if (!isMouseOverCanvas) return;
     if (rightMouseDown) {
