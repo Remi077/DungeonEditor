@@ -88,6 +88,31 @@
             z-index: 1000;
         }
 
+        .popupArrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 30px;
+            height: 30px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            line-height: 30px;
+            border-radius: 15px;
+            cursor: pointer;
+            user-select: none;
+        }
+        #leftArrow { left: 10px; }
+        #rightArrow { right: 10px; }
+
+        #popupCategoryTitle {
+            color: white;
+            text-align: center;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
         canvas {
             display: block;
             max-width: none;   
@@ -286,7 +311,10 @@
             </div>        
 
             <div id="meshpopup" class="popup">
+            <div id="popupCategoryTitle"></div>            
             <canvas id="meshpopupCanvas"></canvas>
+            <div id="leftArrow" class="popupArrow">&lt;</div>
+            <div id="rightArrow" class="popupArrow">&gt;</div>
             </div>
         </div>
 
