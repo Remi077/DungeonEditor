@@ -444,7 +444,9 @@ export function setupEditorUI() {
 
     //setup the popup atlas canvas
     setupPopup(Shared.matpopupCanvas,Shared.atlasMat.map.image,Shared.atlasDict.SIZE,Editor.setMaterial);
-    setupPopup(Shared.meshpopupCanvas,Shared.thumbDict.ATLASMATERIAL.map.image,Shared.thumbDict.SIZE,Editor.setMeshFromMeshindex);
+    // setupPopup(Shared.meshpopupCanvas,Shared.thumbDict.ATLASMATERIAL.map.image,Shared.thumbDict.SIZE,Editor.setMeshFromMeshindex);
+    // setupPopupSubset(Shared.meshpopupCanvas,Shared.thumbDict.IMAGE,128,Editor.setMeshFromMeshName, "PLANE");
+    setupPopupSubset(Shared.meshpopupCanvas,Shared.thumbDict.IMAGE,128,Editor.setMeshFromMeshName);
     
     setupPopup(Shared.mazewallpopupCanvas,Shared.atlasMat.map.image,Shared.atlasDict.SIZE,Editor.setMazeWallMaterial);
     setupPopup(Shared.mazefloorpopupCanvas,Shared.atlasMat.map.image,Shared.atlasDict.SIZE,Editor.setMazeFloorMaterial);
@@ -454,7 +456,9 @@ export function setupEditorUI() {
 // POPUP
 /*-----------------------------------------------------*/
 
+let popupVisible = false;
 function openPopup(thispopup, tr = false) {
+    popupVisible = true;
     thispopup.style.display = "block";
 
     // if (x !== null && y !== null) {
@@ -475,6 +479,7 @@ function openPopup(thispopup, tr = false) {
     }
 }
 export function closePopup(){
+    popupVisible = false;
     Shared.matpopup.style.display       = "none";  // toggle off if already open
     Shared.meshpopup.style.display      = "none";  // toggle off if already open
     Shared.mazewallpopup.style.display  = "none";  // toggle off if already open
@@ -540,6 +545,314 @@ function setupPopup(thiscanvas,thisimage,thiscellsize,thisaction) {
     });
 
 }
+
+// let currentCategoryIndex = 0;
+// const categories = ["PLANE", "PILLAR", "DOME", "GRID"]; // add all your subsets here
+// function setupPopupSubset(thiscanvas, theseimages, thiscellsize, thisaction, prefix = "") {
+//     const ctx = thiscanvas.getContext("2d");
+
+//     // 1. Collect all matching keys
+//     const keys = Object.keys(theseimages).filter(k => k.startsWith(prefix));
+//     // const keys = Object.keys(Shared.atlasDict).filter(k => k.startsWith(prefix));
+
+//     if (keys.length === 0) {
+//         console.warn(`No subimages found starting with "${prefix}"`);
+//         return;
+//     }
+
+//     // Thumbnail size (you can scale them down if needed)
+//     // const thumbW = 64;
+//     // const thumbH = 64;
+//     const thumbW = thiscellsize;
+//     const thumbH = thumbW;
+
+//     // Decide grid size
+//     const cols = 6; // how many per row
+//     // const cols = Math.sqrt(keys.length); // how many per row
+//     const rows = Math.ceil(keys.length / cols);
+
+//     // Resize canvas to fit thumbnails
+//     const padding = 100;
+//     thiscanvas.width = cols * thumbW+padding;
+//     thiscanvas.height = rows * thumbH;
+
+//     // Lookup table from cell index → key
+//     const indexToKey = {};
+
+//     function redraw(highlightIndex = null) {
+//         ctx.clearRect(0, 0, thiscanvas.width, thiscanvas.height);
+
+//         keys.forEach((key, i) => {
+//             const col = i % cols;
+//             const row = Math.floor(i / cols);
+//             const x = col * thumbW+padding/2;
+//             const y = row;
+
+//             // draw the subimage (scaled to fit thumbnail)
+//             ctx.drawImage(theseimages[key], 0, 0, theseimages[key].width, theseimages[key].height,
+//                           x, y, thumbW, thumbH);
+
+//             // store mapping
+//             indexToKey[i] = key;
+
+//             // highlight if hovered
+//             if (highlightIndex === i) {
+//                 // highlight border
+//                 ctx.strokeStyle = "yellow";
+//                 ctx.lineWidth = 2;
+//                 ctx.strokeRect(x, y, thumbW, thumbH);
+
+//                 // draw text label
+//                 // ctx.fillStyle = "rgba(0,0,0,0.7)";
+//                 // ctx.fillRect(x, y + thumbH - 18, thumbW, 18);
+
+//                 // ctx.fillStyle = "white";
+//                 // ctx.font = "12px sans-serif";
+//                 // ctx.textAlign = "center";
+//                 // ctx.textBaseline = "middle";
+//                 // ctx.fillText(key, x + thumbW / 2, y + thumbH - 9);
+//             }
+//         });
+//     }
+
+//     redraw();
+
+//     // Handle mouse events
+//     function getIndexFromEvent(e) {
+//         const rect = thiscanvas.getBoundingClientRect();
+//         const x = e.clientX - rect.left;
+//         const y = e.clientY - rect.top;
+//         const col = Math.floor(x / thumbW);
+//         const row = Math.floor(y / thumbH);
+//         const i = row * cols + col;
+//         return (i >= 0 && i < keys.length) ? i : null;
+//     }
+
+//     // --- tooltip div ---
+//     const tooltip = document.createElement("div");
+//     tooltip.style.position = "fixed";
+//     tooltip.style.pointerEvents = "none";
+//     tooltip.style.background = "rgba(0,0,0,0.75)";
+//     tooltip.style.color = "white";
+//     tooltip.style.padding = "2px 6px";
+//     tooltip.style.borderRadius = "4px";
+//     tooltip.style.fontSize = "12px";
+//     tooltip.style.visibility = "hidden";
+//     tooltip.style.zIndex = "2000";
+//     document.body.appendChild(tooltip);
+
+
+//     thiscanvas.addEventListener("click", (e) => {
+//         const index = getIndexFromEvent(e);
+//         if (index !== null) {
+//             const key = indexToKey[index];
+//             thisaction(key);
+//             closePopup();
+//         }
+//     });
+
+//     thiscanvas.addEventListener("mousemove", (e) => {
+//         const index = getIndexFromEvent(e);
+//         redraw(index);
+
+//         if (index !== null) {
+//             const key = indexToKey[index];
+//             tooltip.textContent = key;
+//             tooltip.style.left = e.clientX + 12 + "px";
+//             tooltip.style.top = e.clientY + 12 + "px";
+//             tooltip.style.visibility = "visible";
+//         } else {
+//             tooltip.style.visibility = "hidden";
+//         }
+
+//     });
+
+//     thiscanvas.addEventListener("mouseleave", () => {
+//         tooltip.style.visibility = "hidden";
+//         redraw(null);
+//     });
+
+
+//     document.getElementById("leftArrow").addEventListener("click", prevCategory);
+//     document.getElementById("rightArrow").addEventListener("click", nextCategory);    
+
+
+//     function prevCategory() {
+//         console.log("prevCategory");
+//         currentCategoryIndex = (currentCategoryIndex + 1) % categories.length;
+//         refreshPopup(categories[currentCategoryIndex]);
+//     }
+//     function nextCategory() {
+//         console.log("nextCategory");
+//         currentCategoryIndex = (currentCategoryIndex - 1 + categories.length) % categories.length;
+//         refreshPopup(categories[currentCategoryIndex]);
+
+//     }
+//     function refreshPopup(prefix) {
+//         setupPopupSubset(
+//             thiscanvas,
+//             theseimages, // all images
+//             thiscellsize,              // cell size
+//             thisaction,
+//             prefix
+//         );
+//     }
+
+// }
+
+const popuppadding = 100;
+function drawPopupCanvas(ctx, images, keys, thumbW, thumbH, cols, highlightIndex = null) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    keys.forEach((key, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const x = col * thumbW + popuppadding/2;
+        const y = row * thumbH;
+
+        ctx.drawImage(
+            images[key],
+            0, 0, images[key].width, images[key].height,
+            x, y, thumbW, thumbH
+        );
+
+        if (highlightIndex === i) {
+            ctx.strokeStyle = "yellow";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, thumbW, thumbH);
+        }
+    });
+}
+
+function setupPopupSubset(thiscanvas, images, cellSize, action) {
+    const ctx = thiscanvas.getContext("2d");
+
+    let currentCategoryIndex = 0;
+    const categories = ["PLANE", "PILLAR", "DOME", "GRID", "ARCH", ""];
+    let keys = [];
+
+    // Tooltip setup (only once)
+    let tooltip = document.getElementById("meshPopupTooltip");
+    if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.id = "meshPopupTooltip";
+        tooltip.style.position = "fixed";
+        tooltip.style.pointerEvents = "none";
+        tooltip.style.background = "rgba(0,0,0,0.75)";
+        tooltip.style.color = "white";
+        tooltip.style.padding = "2px 6px";
+        tooltip.style.borderRadius = "4px";
+        tooltip.style.fontSize = "12px";
+        tooltip.style.visibility = "hidden";
+        tooltip.style.zIndex = "2000";
+        document.body.appendChild(tooltip);
+    }
+
+    const thumbW = cellSize;
+    const thumbH = cellSize;
+    const cols = 6;
+
+    function updateKeys() {
+        const prefix = categories[currentCategoryIndex];
+        if (prefix !== "") {
+            // Normal category: filter by prefix
+            keys = Object.keys(images).filter(k => k.startsWith(prefix));
+        } else {
+            // Catch-all category: pick everything that doesn't start with any other category prefix
+            const otherPrefixes = categories.slice(0, -1); // all except last (which is "")
+            keys = Object.keys(images).filter(k => {
+                return !otherPrefixes.some(p => k.startsWith(p));
+            });
+        }
+        const rows = Math.ceil(keys.length / cols);
+        thiscanvas.width = cols * thumbW + popuppadding;
+        thiscanvas.height = rows * thumbH;
+    }
+
+    function redraw(highlightIndex = null) {
+        drawPopupCanvas(ctx, images, keys, thumbW, thumbH, cols, highlightIndex);
+    }
+
+    function getIndexFromEvent(e) {
+        const rect = thiscanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const col = Math.floor(x / thumbW);
+        const row = Math.floor(y / thumbH);
+        const i = row * cols + col;
+        return (i >= 0 && i < keys.length) ? i : null;
+    }
+
+    function refreshPopup() {
+        updateKeys();
+        document.getElementById("popupCategoryTitle").textContent =
+            categories[currentCategoryIndex] || "OTHER";
+        redraw();
+    }
+
+    // --- Event listeners (attached only once) ---
+    thiscanvas.addEventListener("mousemove", (e) => {
+        const index = getIndexFromEvent(e);
+        redraw(index);
+        if (index !== null) {
+            tooltip.textContent = keys[index];
+            tooltip.style.left = e.clientX + 12 + "px";
+            tooltip.style.top = e.clientY + 12 + "px";
+            tooltip.style.visibility = "visible";
+        } else {
+            tooltip.style.visibility = "hidden";
+        }
+    });
+
+    thiscanvas.addEventListener("click", (e) => {
+        const index = getIndexFromEvent(e);
+        if (index !== null) {
+            action(keys[index]);
+            closePopup();
+        }
+    });
+
+    thiscanvas.addEventListener("mouseleave", () => {
+        tooltip.style.visibility = "hidden";
+        redraw(null);
+    });
+
+    document.getElementById("leftArrow").addEventListener("click", () => {
+        currentCategoryIndex = (currentCategoryIndex - 1 + categories.length) % categories.length;
+        refreshPopup();
+    });
+    document.getElementById("rightArrow").addEventListener("click", () => {
+        currentCategoryIndex = (currentCategoryIndex + 1) % categories.length;
+        refreshPopup();
+    });
+
+    // thiscanvas.addEventListener("keydown", (e) => {
+    document.addEventListener("keydown", (e) => {
+        // console.log("keydown");
+        if (popupVisible) {
+            if (true) {
+                // if (e.key === "ArrowLeft") {
+                if (e.code === "KeyA") {
+                    console.log("keydown");
+                    currentCategoryIndex = (currentCategoryIndex - 1 + categories.length) % categories.length;
+                    refreshPopup();
+                }
+                // if (e.key === "ArrowRight") {
+                if (e.code === "KeyD") {
+                    currentCategoryIndex = (currentCategoryIndex + 1) % categories.length;
+                    refreshPopup();
+                }
+            }
+        }
+    });
+
+    // Initial draw
+    refreshPopup();
+}
+
+
+
+
 
 /*-----------------------------------------------------*/
 // RADIOS EVENT LISTENERS
