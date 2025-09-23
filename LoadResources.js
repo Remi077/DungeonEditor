@@ -106,10 +106,12 @@ function loadAtlas(jsonUrl) {
         const planes = {};
 
         planes["ATLASMATERIAL"] = material;
-        planes["SIZE"] = atlasData["SIZE"];
+        const size =  atlasData["SIZE"];
+        planes["SIZE"] = size;
         planes["NUMX"] = atlasData["NUMX"];
         planes["NUMY"] = atlasData["NUMY"];
         planes["UVS"] = {};
+        planes["IMAGE"] = {};
 
         let images = atlasData["IMAGES"];
         for (const [name, frame] of Object.entries(images)) {
@@ -121,6 +123,23 @@ function loadAtlas(jsonUrl) {
                 x: frame.x,
                 y: frame.y
             };
+
+            // Create a canvas for each sprite
+            const canvas = document.createElement("canvas");
+            canvas.width = size;
+            canvas.height = size;
+
+            const ctx = canvas.getContext("2d");
+            //drawImage copies the pixels in memory-> consumes memory but last 2 arguments could be changed to thumbsize=32x32 to minify the thumbnail size
+            ctx.drawImage(
+                texture.image,
+                frame.x*size, frame.y*size, size, size, // source rect
+                0, 0, size, size              // destination rect
+            );
+
+            planes["IMAGE"][displayName] = canvas;
+
+
         }
 
         return planes;
@@ -206,7 +225,7 @@ function loadMeshAtlas(loader, src) {
                         // child.scale.set(0.5, 0.5, 0.5);
                         // child.geometry.translate(1,0,1);
                         child.geometry.scale(0.5, 0.5, 0.5);
-                        meshMap[child.name] = child;
+                        meshMap[child.name.toUpperCase()] = child;
                     }
                 });
 
