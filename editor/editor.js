@@ -362,7 +362,7 @@ export function setupEditor() {
     // setAddMode(ADDPLANEMODE);
     setWallMode(MODEA);
     setMaterial(0);
-    // setMeshFromMeshName("Plane");
+    // setMeshFromMeshName("PLANE");
     setMeshFromMeshindex(0);
     setMazeWallMaterial(0);
     setMazeFloorMaterial(1);
@@ -548,7 +548,7 @@ export function setMaterial(uvIndex){
 }
 
 export function setMazeWallMaterial(uvIndex){
-    const meshid = Shared.atlasMeshidx["Plane"];
+    const meshid = Shared.atlasMeshidx["PLANE"];
     mazeWallUvMeshId = Shared.encodeID(uvIndex,meshid);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
@@ -559,7 +559,7 @@ export function setMazeWallMaterial(uvIndex){
 }
 
 export function setMazeFloorMaterial(uvIndex){
-    const meshid = Shared.atlasMeshidx["Plane"];
+    const meshid = Shared.atlasMeshidx["PLANE"];
     mazeFloorUvMeshId = Shared.encodeID(uvIndex,meshid);
     //notify the UI back to update the selected combobox
     const event = new CustomEvent("UIChange", {
@@ -978,6 +978,7 @@ export function onMouseWheel(event) {
 /*---------------------------------*/
 function executeUnpausableActions(delta) {
     // Create a local movement vector based on input
+    // console.log("executeUnpausableActions",Actions.moveCamUp);
     const moveVector = new THREE.Vector3();
     const moveCam = Shared.moveSpeed * delta;
     if (Actions.moveCamUp) moveVector.y    += 1;
@@ -1067,11 +1068,11 @@ function editorLoop() {
 
     const deltaTime = Shared.clock.getDelta(); // Time elapsed since last frame
     GameHUD.drawHUD();
-    executeUnpausableActions(deltaTime);
 
     // if (!Shared.editorState.pause || Shared.editorState.renderOneFrame) {
     // if (true) {
     if (Shared.getIsMouseOverCanvas()) {
+        executeUnpausableActions(deltaTime);
 
         // console.log("incanvas");
 
@@ -2454,8 +2455,8 @@ function getUvMeshId(uvname,meshname){
 
 function buildMaze() {
 
-    // const wooduvmeshid = getUvMeshId("FLOORBOARD", "Plane");
-    // const walluvmeshid = getUvMeshId("WALL", "Plane");
+    // const wooduvmeshid = getUvMeshId("FLOORBOARD", "PLANE");
+    // const walluvmeshid = getUvMeshId("WALL", "PLANE");
     const { rotid, uvid, meshid } = Shared.decodeID(mazeWallUvMeshId);
     const matname = Shared.atlasUVsArray[uvid][0];
     const pillaruvmeshid = getUvMeshId(matname, "ArchBase");
