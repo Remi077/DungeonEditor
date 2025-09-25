@@ -116,6 +116,7 @@ let lightMarkerGroup;
 
 // holds baked chunk geometry
 let chunksInScene = {};
+let spritesInScene = {};
 
 // maze variables
 let mazeWallUvMeshId = "0000";
@@ -235,15 +236,17 @@ function setMeshPosition() {
 let scene;
 let sceneGeometryDict;
 let gridMapChunk;
+let gridMapSprites;
 let gridMap;
 export function setupEditor() {
 
     //setup local references to be able to watch them
     //in debugger
-    scene = Shared.scene;
+    scene             = Shared.scene;
     sceneGeometryDict = Shared.sceneGeometryDict;
-    gridMapChunk   = Shared.gridMapChunk;
-    gridMap = Shared.gridMap;
+    gridMapChunk      = Shared.gridMapChunk;
+    gridMapSprites    = Shared.gridMapSprites;
+    gridMap           = Shared.gridMap;
 
     Shared.sceneGeometryDict.clear();
 
@@ -351,6 +354,7 @@ export function setupEditor() {
     
     //chunks group
     Shared.scene.add(Shared.chunksGroup);
+    Shared.scene.add(Shared.spritesGroup);
 
     //start in add plane mode
     //expand add plane
@@ -599,6 +603,19 @@ export function setMeshFromMeshindex(meshindex){
 export function setMeshFromMeshName(meshname){
     const meshindex = Shared.atlasMeshidx[meshname];
     currentMeshIndex = meshindex;
+
+
+
+    //If there is a material which matches the mesh name
+    //set it immediately there
+    for (const [name,id] of Object.entries(Shared.atlasUVsidx)){
+        if (name.startsWith(meshname)){
+            setMaterial(id);
+            break;
+        }
+    }
+
+
     setMesh(currentRot,currentUVIndex,meshindex);
     const event = new CustomEvent("UIChange", {
         detail: { field: "MeshChange", value: meshindex },
@@ -690,6 +707,8 @@ function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
     const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
     const meshname = Shared.atlasMeshArray[meshid][0];
 
+    const isSprite = meshname.startsWith("SPRITE");
+
     const undoitem = {
             wx:wx,
             wy:wy,
@@ -704,7 +723,10 @@ function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
     const tilekey = Shared.getGridKey(wx, wy, wz);
 
     let tile = gridMap[direction].get(tilekey);
-    let chunk = gridMapChunk.get(chunkkey);
+    let chunk = null;
+    let mapChunk = null;
+    mapChunk = gridMapChunk;
+    chunk = mapChunk.get(chunkkey);
 
     // Eraser mode
     if (tile && (meshname in tile || meshname === "")) {
@@ -720,6 +742,13 @@ function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
         }
         if (chunk) chunk.dirty = true;
         //handle the mapping update (deletion) in rebuildDirtyChunk
+        
+        // cleanup: remove empty tiles
+        if (Object.keys(tile).length === 0) {
+            gridMap[direction].delete(tilekey);
+            tile=null;
+        }
+    
     }
 
     if (undoable) undogroup.push(undoitem);
@@ -728,6 +757,7 @@ function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
 
     // Add/update tile
     if (!tile) {
+
         tile = {};
         gridMap[direction].set(tilekey, tile);
 
@@ -738,13 +768,15 @@ function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
                 YZ: new Map(),
                 XY: new Map()
             };
-            gridMapChunk.set(chunkkey, chunk);
+            mapChunk.set(chunkkey, chunk);
         }
 
         chunk[direction].set(tilekey, tile);
+
     }
 
     tile[meshname] = uvmeshid;
+
     chunk.dirty = true;
 
 }
@@ -1117,6 +1149,10 @@ function editorLoop() {
         //rebuild dirty chunks
         rebuildDirtyChunks();
 
+        //
+        // buildSprites();
+
+
         // Simulate heavy computation
         if (0) Stats.simulateBlockingWait(200); // 200ms delay
         Stats.updateTextStatsThrottled();
@@ -1174,13 +1210,19 @@ function highlightMeshToDelete(){
 
     //If eraser mode set raycast against any geometry
     raycastChunkArray = Object.values(chunksInScene);
+    // all sprite meshes (flattened)
+    const spriteMeshesArray = Object.values(spritesInScene).flat();
+    // merge both
+    const raycastTargets = raycastChunkArray.concat(spriteMeshesArray);
+    //TO OPTIMIZE: only raycast against chunks in front of Shared.camera instead of all the chunks
 
     //perform the raycast
     const mouse = Shared.getMouse();
     // raycaster.setFromCamera(screenCenter, Shared.camera);
     raycaster.setFromCamera(mouse, Shared.camera);
     let doesIntersect = false;
-    const hits = raycaster.intersectObjects(raycastChunkArray, false);
+    // const hits = raycaster.intersectObjects(raycastChunkArray, false);
+    const hits = raycaster.intersectObjects(raycastTargets, false);
 
     let closestHit = null;
 
@@ -1196,9 +1238,27 @@ function highlightMeshToDelete(){
 
     if (doesIntersect) {
 
-        let facehit = closestHit.faceIndex;
-        let facetotilerange = closestHit.object?.userData?.facetotilerange;
-        selectInfo = facetotilerange.find(r => facehit >= r.start && facehit <= r.end);
+        const hitType = closestHit.object?.userData?.type;
+
+        switch (hitType) {
+            case "mesh": {
+                const facehit = closestHit.faceIndex;
+                const facetotilerange = closestHit.object?.userData?.facetotilerange;
+                if (!facetotilerange) throw new Error(`Mesh userData.facetotilerange missing.`);
+                
+                const entry = facetotilerange.find(r => facehit >= r.start && facehit <= r.end);
+                if (!entry) throw new Error(`No facetotilerange entry found for faceIndex ${facehit}`);
+                
+                selectInfo = entry.info;
+                break;
+            }
+            case "sprite":
+                selectInfo = closestHit.object?.userData?.info;
+                if (!selectInfo) throw new Error(`Sprite userData.info missing.`);
+                break;
+            default:
+                throw new Error(`Raycasted geometry has no type or unknown hitType: ${hitType}`);
+        }
 
         if (!prevSelectInfo || prevSelectInfo !== selectInfo) {
             // console.log(selectInfo.direction,selectInfo.tilexyz,selectInfo.uvmeshid);
@@ -2327,6 +2387,7 @@ function rebuildDirtyChunks() {
         const tileGeometries = [];
         const facetotilerange = [];
         let faceOffset = 0;
+        const spriteMeshes = [];
 
         for (const direction of ["XZ", "YZ", "XY"]) {
             const chunkslice = chunk[direction];
@@ -2344,19 +2405,26 @@ function rebuildDirtyChunks() {
 
                 // chunkmatrix.copy(rot).setPosition(chunkpos);
 
-                for (const uvmeshid of Object.values(tilemeshes)) {
+                for (const [meshname,uvmeshid] of Object.entries(tilemeshes)) {
+
+                    // if (meshname.startsWith("SPRITE")){
+                    //     // console.log(meshname);
+                    //     continue;//do not chunk the sprites
+                    // }
+
                     const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
                     // const uvmeshidrot0 = Shared.encodeID(uvid,meshid);
                     const uvmeshidrot0 = uvmeshid; //TEMP: find a way to optimize this, ie only register
                     //unique geometries indepedently from rotation. pb is that this breaks save/load at the moment 
+                    let sharedgeom;
                     let newgeom;
                     //clone from cache if 
                     if (Shared.sceneGeometryDict.has(uvmeshidrot0)) {
-                        newgeom = Shared.sceneGeometryDict.get(uvmeshidrot0).clone();
+                        sharedgeom = Shared.sceneGeometryDict.get(uvmeshidrot0);
                     } else {
                         // const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
-                        newgeom = generateGeometry(0, uvid, meshid);
-                        Shared.sceneGeometryDict.set(uvmeshidrot0, newgeom.clone());
+                        sharedgeom = generateGeometry(0, uvid, meshid);
+                        Shared.sceneGeometryDict.set(uvmeshidrot0, sharedgeom);
                     }
 
                     const { rot, pos: offset } = RotOffsetPerSlice(direction,rotid);
@@ -2365,40 +2433,62 @@ function rebuildDirtyChunks() {
                         offset.y + Shared.cellSize * y,
                         offset.z + Shared.cellSize * z
                     );
-                    chunkmatrix.copy(rot).setPosition(chunkpos);
-                    newgeom.applyMatrix4(chunkmatrix);
 
-                    // how many triangles does this tile contribute?
-                    const triCount = newgeom.index
-                        ? newgeom.index.count / 3
-                        : newgeom.attributes.position.count / 3;
+                    if (meshname.startsWith("SPRITE")){
+                        const spriteMesh = new THREE.Mesh(sharedgeom, Shared.atlasMat);
+                        // spriteMesh.rotation.copy(rot);
+                        spriteMesh.position.copy(chunkpos);
+                        spriteMesh.setRotationFromMatrix(rot);
+                        const info = {direction,tilexyz,uvmeshid};
+                        spriteMesh.userData = {type:"sprite",info};
+                        spriteMeshes.push(spriteMesh);
+                    } else {
+                        newgeom=sharedgeom.clone();// we are going to transform the geometry to chunk it together
+                        //so clone it from sharedgeom to be safe
+                        chunkmatrix.copy(rot).setPosition(chunkpos);
+                        newgeom.applyMatrix4(chunkmatrix);
 
-                    let start=faceOffset;
-                    let end=faceOffset+triCount-1;
-                    facetotilerange.push({start,end,direction,tilexyz,uvmeshid});
+                        // how many triangles does this tile contribute?
+                        const triCount = newgeom.index
+                            ? newgeom.index.count / 3
+                            : newgeom.attributes.position.count / 3;
 
-                    faceOffset += triCount;
+                        let start=faceOffset;
+                        let end=faceOffset+triCount-1;
+                        const info = {direction,tilexyz,uvmeshid};
+                        facetotilerange.push({start,end,info});
 
-                    tileGeometries.push(newgeom);
+                        faceOffset += triCount;
+
+                        tileGeometries.push(newgeom);
+                    }
                 }
 
                 // cleanup: remove empty tiles
                 if (Object.keys(tilemeshes).length === 0) {
                     chunkslice.delete(tilexyz);
-                    gridMap[direction].delete(tilexyz);
+                    // gridMap[direction].delete(tilexyz);
                 }
             }
         }
 
         if (tileGeometries.length > 0) {
             const bakedGeometry = mergeBufferGeometries(tileGeometries, false);
+            for (const geom of tileGeometries) geom.dispose();//we dont need these anymore after chunking
+
             bakedGeometry.name = "ChunkGeometry_"+chunkKey;
             const bakedMesh = new THREE.Mesh(bakedGeometry, Shared.atlasMat);
 
-            bakedMesh.userData = {facetotilerange : facetotilerange}; //store mapping
+            bakedMesh.userData = {type: "mesh", facetotilerange : facetotilerange}; //store mapping
             chunksInScene[chunkKey] = bakedMesh;
             bakedMesh.name = "Chunk_"+chunkKey;
             Shared.chunksGroup.add(bakedMesh);
+        }
+        for (const spriteMesh of spriteMeshes){
+            if (!spritesInScene[chunkKey]) spritesInScene[chunkKey] = [];
+            spritesInScene[chunkKey].push(spriteMesh);
+            spriteMesh.name = "Sprite_"+spritesInScene[chunkKey].length.toString()+"_"+spriteMesh.userData.uvmeshid;
+            Shared.chunksGroup.add(spriteMesh);
         }
 
         chunk.dirty = false;
@@ -2411,6 +2501,13 @@ function deleteChunkInScene(chunkKey){
         chunksInScene[chunkKey].geometry.dispose();
         delete chunksInScene[chunkKey];
     }
+    if (chunkKey in spritesInScene) {
+        for (const spriteMesh of spritesInScene[chunkKey]){
+            Shared.chunksGroup.remove(spriteMesh);
+        }
+        //do not call geometry.dispose here as the spritemeshes share them
+        delete spritesInScene[chunkKey];
+    }   
 }
 
 function deleteAllChunksInScene(){
@@ -2751,3 +2848,50 @@ function setRotation(rotid){
     // });
     // document.dispatchEvent(event);
 }
+
+
+
+// function buildSprites(){
+//     for (const [chunkKey, chunk] of Shared.gridMapSpriteChunk.entries()) {
+//         if (!chunk.dirty) continue;
+
+//         for (const direction of ["XZ", "YZ", "XY"]) {
+//             const chunkslice = chunk[direction];
+//             for (const [tilexyz, tilemeshes] of chunkslice.entries()) {
+//                 const { x, y, z } = Shared.parseGridKey(tilexyz);
+//                 for (const [meshname,uvmeshid] of Object.entries(tilemeshes)) {
+//                     if (!meshname.startsWith("SPRITE")) continue;
+//                     //unique geometries indepedently from rotation. pb is that this breaks save/load at the moment 
+//                     const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
+//                     let newgeom;
+//                     //clone from cache if 
+//                     if (Shared.sceneGeometryDict.has(uvmeshid)) {
+//                         newgeom = Shared.sceneGeometryDict.get(uvmeshid).clone();
+//                     } else {
+//                         newgeom = generateGeometry(0, uvid, meshid);
+//                         Shared.sceneGeometryDict.set(uvmeshid, newgeom.clone());
+//                     }
+//                     const { rot, pos: offset } = RotOffsetPerSlice(direction,rotid);
+//                     chunkpos.set(
+//                         offset.x + Shared.cellSize * x,
+//                         offset.y + Shared.cellSize * y,
+//                         offset.z + Shared.cellSize * z
+//                     );
+//                     chunkmatrix.copy(rot);//.setPosition(chunkpos);
+//                     newgeom.applyMatrix4(chunkmatrix);
+//                     const newmesh = new THREE.Mesh(newgeom, Shared.atlasMat);
+//                     newmesh.position.copy(chunkpos);
+
+//                     newmesh.userData = {direction:direction,tilexyz:tilexyz,uvmeshid:uvmeshid}; //store mapping
+//                     spritesInScene[chunkKey] = newmesh;
+//                     newmesh.name = "Sprite_"+chunkKey;
+//                     Shared.spritesGroup.add(newmesh);
+
+
+//                 }
+//             }
+//         }
+
+//         chunk.dirty = false;
+//     }
+// }
