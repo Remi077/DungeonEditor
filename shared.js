@@ -145,10 +145,18 @@ export let ambientLight = new THREE.AmbientLight(AMBIENTLIGHTEDITCOLOR); // Soft
 export const gridMapChunk = new Map();
 export const chunksGroup = new THREE.Group(); chunksGroup.name = "chunksGroup";
 
+export const gridMapSprites = {};
+gridMapSprites.XZ = new Map();
+gridMapSprites.YZ = new Map();
+gridMapSprites.XY = new Map();
+export const spritesGroup = new THREE.Group(); spritesGroup.name = "spritesGroup";
+export const gridMapSpriteChunk = new Map();
+
 export const gridMap   = {};
 gridMap.XZ = new Map();
 gridMap.YZ = new Map();
 gridMap.XY = new Map();
+
 export const gridLight = new Map();
 
 // camera holder: FPS-style rotation system
