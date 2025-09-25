@@ -1,0 +1,87 @@
+{
+  "SIZE": 64,
+  "NUMX": 16,
+  "NUMY": 16,
+  "IMAGES": {
+    "checker.png": {
+      "x": 0,
+      "y": 15
+    },
+    "crate.jpg": {
+      "x": 1,
+      "y": 15
+    },
+    "Door.png": {
+      "x": 2,
+      "y": 15
+    },
+    "floorboard.jpg": {
+      "x": 3,
+      "y": 15
+    },
+    "floorplank.png": {
+      "x": 4,
+      "y": 15
+    },
+    "grass.png": {
+      "x": 5,
+      "y": 15
+    },
+    "spritetorch_frame0.png": {
+      "x": 6,
+      "y": 15
+    },
+    "spritetorch_frame1.png": {
+      "x": 7,
+      "y": 15
+    },
+    "stonewall.jpg": {
+      "x": 8,
+      "y": 15
+    },
+    "tree.png": {
+      "x": 9,
+      "y": 15
+    },
+    "wall.png": {
+      "x": 10,
+      "y": 15
+    },
+    "wallalcove.png": {
+      "x": 11,
+      "y": 15
+    },
+    "wallchain.png": {
+      "x": 12,
+      "y": 15
+    },
+    "walldark.png": {
+      "x": 13,
+      "y": 15
+    },
+    "walldoor.png": {
+      "x": 14,
+      "y": 15
+    },
+    "wallplanks.png": {
+      "x": 15,
+      "y": 15
+    },
+    "wallpuddle.png": {
+      "x": 0,
+      "y": 14
+    },
+    "wallsewer.png": {
+      "x": 1,
+      "y": 14
+    },
+    "wallseweralpha.png": {
+      "x": 2,
+      "y": 14
+    },
+    "wallsimple.png": {
+      "x": 3,
+      "y": 14
+    }
+  }
+}
