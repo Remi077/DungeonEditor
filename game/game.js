@@ -168,14 +168,14 @@ function isColliding(actor, moveVectorv) {
         k = Shared.getGridKey(posx, 0, posz);
         k2 = Shared.getGridKey(posx-1, 0, posz);
         const cell = Shared.gridMap.XZ.get(k2);
-        if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("Pillar"))))) {
+        if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("PILLAR"))))) {
             isCollidingX = ((actor.position.x - posx) % csize) <= minDistancefromWalls;
             // colliderX1 = Shared.gridMapYZ.get(k);
         } 
     } else {//camera moving towards increasing X
         k = Shared.getGridKey(posx + 1, 0, posz);
         const cell = Shared.gridMap.XZ.get(k);
-        if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("Pillar"))))) {
+        if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("PILLAR"))))) {
             isCollidingX = ((actor.position.x - posx) % csize) >= (csize - minDistancefromWalls);
             // colliderX2 = Shared.gridMapYZ.get(k);
         }
@@ -186,14 +186,14 @@ function isColliding(actor, moveVectorv) {
         k = Shared.getGridKey(posx, 0, posz);
         k2 = Shared.getGridKey(posx, 0, posz-1);
         const cell = Shared.gridMap.XZ.get(k2);
-        if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("Pillar")))) {
+        if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("PILLAR")))) {
             isCollidingZ = ((actor.position.z - posz) % csize) <= minDistancefromWalls;
             // colliderZ1 = Shared.gridMapXY.get(k);
         }
     } else {//camera moving towards increasing Z
         k = Shared.getGridKey(posx, 0, posz + 1);
         const cell = Shared.gridMap.XZ.get(k);
-        if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("Pillar")))) {
+        if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("PILLAR")))) {
             isCollidingZ = ((actor.position.z - posz) % csize) >= (csize - minDistancefromWalls);
             // colliderZ2 = Shared.gridMapXY.get(k);
         }
@@ -270,7 +270,7 @@ function isTouchingGround() {
     const posz = Math.floor(Shared.yawObject.position.z/Shared.cellSize);
     const k = Shared.getGridKey(posx, posy, posz);
     const thiscell = Shared.gridMap.XZ.get(k);
-    const thisCellIsPlane = ((thiscell && Object.keys(thiscell).some(key => key.startsWith("Plane"))));
+    const thisCellIsPlane = ((thiscell && Object.keys(thiscell).some(key => key.startsWith("PLANE"))));
 
     if (!thisCellIsPlane) return false;
     return ((posfeet%Shared.cellSize) < 0.1);
