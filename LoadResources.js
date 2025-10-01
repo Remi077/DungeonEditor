@@ -225,6 +225,19 @@ function loadMeshAtlas(loader, src) {
                         // child.scale.set(0.5, 0.5, 0.5);
                         // child.geometry.translate(1,0,1);
                         child.geometry.scale(0.5, 0.5, 0.5);
+
+
+                        //Blender +Y (forward) ⟶ Three.js −Z (forward)
+                        //Blender +Z (up)      ⟶ Three.js +Y (up)
+                        //Blender +X (right)   ⟶ Three.js +X (right)
+                        //because of the UV forward flip we rotate them 180 degrees at import
+                        child.geometry.attributes.uv.array.forEach((val, i) => {
+                            if (i % 2 === 1) { // every second number = V coordinate
+                                child.geometry.attributes.uv.array[i] = 1 - val;
+                            }
+                        });
+                        child.geometry.attributes.uv.needsUpdate = true;
+
                         meshMap[child.name.toUpperCase()] = child;
                     }
                 });
