@@ -30,23 +30,25 @@ const NUMMODES = 5;
 //     XY: { pos: new THREE.Vector3(0.5, 0.5, 0), rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)) }
 // };
 
+
+// A THREE.Euler uses Euler order "XYZ" (unless you specify otherwise).
 function RotOffsetPerSlice(dir,rot){
     const curRotRadians = rot*(Math.PI/2);
     switch (dir) {
         case "XZ":
             return{
                 pos: new THREE.Vector3(0.5, 0, 0.5),
-                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0, Math.PI+curRotRadians, 0))
+                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0, curRotRadians, 0))
             };
         case "YZ":
             return{
                 pos: new THREE.Vector3(0, 0.5, 0.5),
-                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2+curRotRadians, 0, Math.PI / 2))
+                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.PI / 2 + curRotRadians, 0, -Math.PI / 2))
             };
         case "XY":
             return{
                 pos: new THREE.Vector3(0.5, 0.5, 0),
-                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(-Math.PI / 2, curRotRadians, 0))
+                rot: new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.PI / 2, curRotRadians, 0))
             };
     }
 }
@@ -219,14 +221,14 @@ Shared.renderer.setSize(Shared.container.clientWidth, Shared.container.clientHei
 // setMeshPosition
 /*---------------------------------*/
 function setMeshPosition() {
-    markerxz.rotation.y = Math.PI;  //relative x,y,z
+    // markerxz.rotation.y = Math.PI;  //relative x,y,z
     markerxz.position.set(0.5, 0, 0.5);  //relative x,y,z
 
-    markeryz.rotation.x = -Math.PI/2;   //left plane
-    markeryz.rotation.z = Math.PI / 2;   //left plane
+    markeryz.rotation.x = Math.PI/2;   //left plane
+    markeryz.rotation.z = -Math.PI / 2;   
     markeryz.position.set(0, 0.5, 0.5);   
 
-    markerxy.rotation.x = -Math.PI / 2;   //left plane
+    markerxy.rotation.x = Math.PI / 2;   
     markerxy.position.set(0.5, 0.5, 0);  //front plane (facing you)
 }
 
@@ -2792,8 +2794,8 @@ function buildMaze() {
             placeTile(x, 0, z, "XZ", mazeFloorUvMeshId, false, false);
             // placeTile(x, maxY, z, "XZ", mazeFloorUvMeshId, false, false);
         }
+        if (!room) placeTile(x,0,z,"XZ",pillaruvmeshid,false,false);
         for (let y = 0; y <= maxY; y++) {
-            if (!room) placeTile(x,y,z,"XZ",pillaruvmeshid,false,false);
             if (north) placeTile(x, y, z, "XY", mazeWallUvMeshId, false, false);
             if (south) placeTile(x, y, z + 1, "XY", mazeWallUvMeshId, false, false);
             if (west) placeTile(x, y, z, "YZ", mazeWallUvMeshId, false, false);
@@ -2821,8 +2823,8 @@ function rotLeft(){
     // currentRot %= 4;
     const newrot=(currentRot+1)%4;
     const newRotRadians = newrot*(Math.PI/2);
-    markerxz.rotation.y=Math.PI+newRotRadians;
-    markeryz.rotation.x=-Math.PI/2+newRotRadians;
+    markerxz.rotation.y=newRotRadians;
+    markeryz.rotation.x=Math.PI/2+newRotRadians;
     markerxy.rotation.y=newRotRadians;
     setRotation(newrot);
     reinitMarker();
@@ -2830,8 +2832,8 @@ function rotLeft(){
 function rotRight(){
     const newrot=(currentRot+(4-1))%4;
     const newRotRadians = newrot*(Math.PI/2);
-    markerxz.rotation.y=Math.PI+newRotRadians;
-    markeryz.rotation.x=-Math.PI/2+newRotRadians;
+    markerxz.rotation.y=newRotRadians;
+    markeryz.rotation.x=Math.PI/2+newRotRadians;
     markerxy.rotation.y=newRotRadians;
     setRotation(newrot);
     reinitMarker();
