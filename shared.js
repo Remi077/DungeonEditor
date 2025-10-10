@@ -102,6 +102,7 @@ export let atlasDict     = {};  //atlas dictionary
 export let atlasUVsArray = [];  //material array (from dictionary)
 export let atlasUVsidx   = {};  //UV to index map (for fast lookup)
 export let atlasMat;
+export let atlasMatTransp;
 export let atlasUVs;
 export let atlasMesh;
 export let atlasMeshArray      = [];
@@ -114,6 +115,9 @@ export let uvmeshidHexWidth    = uvmeshidBits/4;
 export const sceneGeometryDict = new Map();
 export let thumbDict           = {};         //thumbnail dictionary
 export let thumbDictUVsArray   = [];         //mesh array (from dictionary)
+
+//holds geometry with animated uvs
+export const UVToUpdate = [];
 
 //uv info
 export const uvInfo = {};
@@ -145,10 +149,10 @@ export let ambientLight = new THREE.AmbientLight(AMBIENTLIGHTEDITCOLOR); // Soft
 export const gridMapChunk = new Map();
 export const chunksGroup = new THREE.Group(); chunksGroup.name = "chunksGroup";
 
-export const gridMapSprites = {};
-gridMapSprites.XZ = new Map();
-gridMapSprites.YZ = new Map();
-gridMapSprites.XY = new Map();
+// export const gridMapSprites = {};
+// gridMapSprites.XZ = new Map();
+// gridMapSprites.YZ = new Map();
+// gridMapSprites.XY = new Map();
 export const spritesGroup = new THREE.Group(); spritesGroup.name = "spritesGroup";
 export const gridMapSpriteChunk = new Map();
 
@@ -184,6 +188,7 @@ export async function loadResources() {
     atlasDict  = resourcesDict.ATLAS.ATLAS0;
     thumbDict  = resourcesDict.ATLAS.MESHTHUMBNAIL;
     atlasMat   = atlasDict.ATLASMATERIAL;
+    atlasMatTransp   = atlasDict.ATLASMATERIALTRANSP;
     atlasUVs   = atlasDict.UVS;
     atlasUVsArray = Object.entries(atlasUVs);
     atlasUVsArray.forEach(([key], idx) => {
@@ -628,4 +633,22 @@ export function setWallHeight(height){
 export function setFloorHeight(height){
     // console.log("floor height is",height);
     floorHeight = height;
+}
+
+export function updateAnimatedTextures() {
+
+    for (const obj of UVToUpdate) {
+
+        // const probesprite = spritesInScene;
+        // if (maxiterations<=0)return;
+        // maxiterations--;
+
+        let { geomToUpdate, uvs, curidx } = obj;
+        obj.curidx = (curidx + 1) % uvs.length; // advance safely in loop
+        // console.log(obj.curidx);
+        geomToUpdate.attributes.uv = uvs[obj.curidx];
+        geomToUpdate.attributes.uv.needsUpdate = true; // <-- required
+        // geomToUpdate.userData["uvupdateiter"]=maxiterations;
+    }
+
 }
