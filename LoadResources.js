@@ -100,12 +100,21 @@ function loadAtlas(jsonUrl) {
             side: THREE.DoubleSide, // To show the sprite from both sides if needed
         });
 
+        const transmaterial = new THREE.MeshLambertMaterial({
+            map: texture,
+            transparent: true, //TEMP: a transparent plane adds 2 draw calls per plane instead of 1.
+            // transparent: false,
+            name: "ATLASMATERIALTRANSP",
+            side: THREE.DoubleSide, // To show the sprite from both sides if needed
+        });
+
         const atlasWidth = texture.image.width;
         const atlasHeight = texture.image.height;
 
         const planes = {};
 
         planes["ATLASMATERIAL"] = material;
+        planes["ATLASMATERIALTRANSP"] = transmaterial;
         const size =  atlasData["SIZE"];
         planes["SIZE"] = size;
         planes["NUMX"] = atlasData["NUMX"];
