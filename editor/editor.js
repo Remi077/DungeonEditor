@@ -120,6 +120,9 @@ let lightMarkerGroup;
 let chunksInScene = {};
 let spritesInScene = {};
 
+//holds geometry with animated uvs
+// let UVToUpdate = [];
+
 // maze variables
 let mazeWallUvMeshId = "0000";
 let mazeFloorUvMeshId = "0000";
@@ -238,7 +241,7 @@ function setMeshPosition() {
 let scene;
 let sceneGeometryDict;
 let gridMapChunk;
-let gridMapSprites;
+// let gridMapSprites;
 let gridMap;
 export function setupEditor() {
 
@@ -247,7 +250,7 @@ export function setupEditor() {
     scene             = Shared.scene;
     sceneGeometryDict = Shared.sceneGeometryDict;
     gridMapChunk      = Shared.gridMapChunk;
-    gridMapSprites    = Shared.gridMapSprites;
+    // gridMapSprites    = Shared.gridMapSprites;
     gridMap           = Shared.gridMap;
 
     Shared.sceneGeometryDict.clear();
@@ -842,7 +845,7 @@ export function onMouseUp(event) {
 
     if (!Shared.editorState.editorRunning || !Shared.getIsMouseOverCanvas()) return;
 
-    console.log("mouseup");
+    // console.log("mouseup");
 
     if (event.button == 0) {
 
@@ -1093,7 +1096,9 @@ let selectObj = null;
 let selectInfo = null;
 let prevSelectInfo = null;
 
-function editorLoop() {
+let lastUVUpdate = 0;
+const uvUpdateInterval = 0.07; // seconds between updates
+function editorLoop(now) {
 
     if (!Shared.editorState.editorRunning) return;
 
@@ -1150,6 +1155,15 @@ function editorLoop() {
 
         //rebuild dirty chunks
         rebuildDirtyChunks();
+
+
+        // convert ms → seconds
+        const t = now * 0.001;
+        // only update if enough time has passed
+        if (t - lastUVUpdate >= uvUpdateInterval) {
+            Shared.updateAnimatedTextures();
+            lastUVUpdate = t;
+        }
 
         //
         // buildSprites();
@@ -1568,6 +1582,7 @@ export function resetLevel() {
     undogroups.length = 0;
     clearGridMap();
     clearAllGridMapChunks();
+    clearAnimatedTextures();
     Shared.gridLight.clear();
     reinitMarker();
     // Shared.resetCamera();
@@ -1713,6 +1728,17 @@ async function loadPlanesIntoScene(jsondata) {
         //create the geometry for given uv+mesh and put it in the dict
         const newgeom = generateGeometry(rotid,uvid,meshid);
         Shared.sceneGeometryDict.set(uvmeshid_,newgeom);
+
+        let uvname = Shared.atlasUVsArray[uvid][0]; // actual string key
+        let isFirstFrame = uvname?.endsWith("_FRAME0");
+        if (isFirstFrame) {
+            const uvframes = generateAnimatedTextures(uvname,meshid);
+            Shared.UVToUpdate.push({
+                geomToUpdate: newgeom,
+                uvs: uvframes,
+                curidx: 0
+            });
+        }
     }
     const sceneGeometryDictArray = Array.from(Shared.sceneGeometryDict.entries());
 
@@ -2182,29 +2208,60 @@ function generateDefaultGeometry(){
 }
 
 /*---------------------------------*/
-// generateGeometry
+// generateUV
 /*---------------------------------*/
-function generateGeometry(rotid,uvid,meshid) {
-    let m = (Shared.atlasMeshArray[meshid][1]?.geometry).clone();
-    let uv = m.attributes.uv.clone();
 
+function generateUV(uv,uvid){
     const xt = (Shared.atlasUVsArray[uvid][1]?.x || 0);
-    const yt = (Shared.atlasUVsArray[uvid][1]?.y || 0);
-
+    const yt = (Shared.atlasUVsArray[uvid][1]?.y || 0);    
     const offsetX = xt * Shared.uvInfo.uvscalex;
     const offsetY = yt * Shared.uvInfo.uvscaley;
     for (let i = 0; i < uv.count; i++) {
         let x = uv.getX(i);
         let y = uv.getY(i);
         // Scale down to tile size
+        //important, x should be initialized before
+        //ie the same geometry cannot go twice through this same function
         x = x * Shared.uvInfo.uvscalex;
         y = y * Shared.uvInfo.uvscaley;
         // Offset to desired tile
         x += offsetX;
         y += offsetY;
         uv.setXY(i, x, y);
+        uv.name = uvid;
     }
     uv.needsUpdate = true;
+    return uv;    
+}
+
+/*---------------------------------*/
+// generateGeometry
+/*---------------------------------*/
+
+function generateGeometry(rotid,uvid,meshid) {
+    let m = (Shared.atlasMeshArray[meshid][1]?.geometry).clone();
+    // let uv = m.attributes.uv.clone();
+
+    // const xt = (Shared.atlasUVsArray[uvid][1]?.x || 0);
+    // const yt = (Shared.atlasUVsArray[uvid][1]?.y || 0);
+    
+    let geomuv = m.attributes.uv.clone();
+    let uv = generateUV(geomuv,uvid);
+
+    // const offsetX = xt * Shared.uvInfo.uvscalex;
+    // const offsetY = yt * Shared.uvInfo.uvscaley;
+    // for (let i = 0; i < uv.count; i++) {
+    //     let x = uv.getX(i);
+    //     let y = uv.getY(i);
+    //     // Scale down to tile size
+    //     x = x * Shared.uvInfo.uvscalex;
+    //     y = y * Shared.uvInfo.uvscaley;
+    //     // Offset to desired tile
+    //     x += offsetX;
+    //     y += offsetY;
+    //     uv.setXY(i, x, y);
+    // }
+    // uv.needsUpdate = true;
     m.attributes.uv = uv;
 
     const newmeshname = Shared.atlasMeshArray[meshid][0];
@@ -2427,6 +2484,39 @@ function rebuildDirtyChunks() {
                         // const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
                         sharedgeom = generateGeometry(0, uvid, meshid);
                         Shared.sceneGeometryDict.set(uvmeshidrot0, sharedgeom);
+
+                        // check anim
+                        let uvname = Shared.atlasUVsArray[uvid][0]; // actual string key
+                        // let isFrame = uvname?.endsWith("framed+");
+                        let isFirstFrame = uvname?.endsWith("_FRAME0");
+                        if (isFirstFrame) {
+                            // const prefix = uvname.replace(/_FRAME\d+$/, "");
+
+                            // // find all frame keys
+                            // const frames = Shared.atlasUVsArray
+                            //     .map(([key]) => key) // get the string names
+                            //     .filter(key => key.startsWith(prefix) && /_FRAME\d+$/.test(key))
+                            //     .sort((a, b) => {
+                            //         const na = parseInt(a.match(/_FRAME(\d+)$/)[1], 10);
+                            //         const nb = parseInt(b.match(/_FRAME(\d+)$/)[1], 10);
+                            //         return na - nb;
+                            //     });
+
+                            // // now convert keys -> uvids
+                            // const uvframes = frames.map(fkey => {
+                            //     const frameuvid = Shared.atlasUVsidx[fkey]; // lookup index by key
+                            //     let newuv = Shared.atlasMeshArray[meshid][1]?.geometry.attributes.uv.clone();
+                            //     return generateUV(newuv,frameuvid);
+                            // });
+                            const uvframes = generateAnimatedTextures(uvname,meshid);
+
+                            Shared.UVToUpdate.push({
+                                geomToUpdate: sharedgeom,
+                                uvs: uvframes,
+                                curidx: 0
+                            });
+                        }
+
                     }
 
                     const { rot, pos: offset } = RotOffsetPerSlice(direction,rotid);
@@ -2436,8 +2526,12 @@ function rebuildDirtyChunks() {
                         offset.z + Shared.cellSize * z
                     );
 
+
+
+
+
                     if (meshname.startsWith("SPRITE")){
-                        const spriteMesh = new THREE.Mesh(sharedgeom, Shared.atlasMat);
+                        const spriteMesh = new THREE.Mesh(sharedgeom, Shared.atlasMatTransp);
                         // spriteMesh.rotation.copy(rot);
                         spriteMesh.position.copy(chunkpos);
                         spriteMesh.setRotationFromMatrix(rot);
@@ -2897,3 +2991,40 @@ function setRotation(rotid){
 //         chunk.dirty = false;
 //     }
 // }
+
+
+// let maxiterations=200;
+
+
+function generateAnimatedTextures(uvname,meshid){
+    const prefix = uvname.replace(/_FRAME\d+$/, "");
+
+    // find all frame keys
+    const frames = Shared.atlasUVsArray
+        .map(([key]) => key) // get the string names
+        .filter(key => key.startsWith(prefix) && /_FRAME\d+$/.test(key))
+        .sort((a, b) => {
+            const na = parseInt(a.match(/_FRAME(\d+)$/)[1], 10);
+            const nb = parseInt(b.match(/_FRAME(\d+)$/)[1], 10);
+            return na - nb;
+        });
+
+    // now convert keys -> uvids
+    const uvframes = frames.map(fkey => {
+        const frameuvid = Shared.atlasUVsidx[fkey]; // lookup index by key
+        let newuv = Shared.atlasMeshArray[meshid][1]?.geometry.attributes.uv.clone();
+        return generateUV(newuv,frameuvid);
+    });
+
+    return uvframes;
+
+}
+
+function clearAnimatedTextures() {
+    for (const { uvs } of Shared.UVToUpdate) {
+        for (const attr of uvs) {
+            attr.dispose();
+        }
+    }
+    Shared.UVToUpdate.length = 0; // clear in place
+}
