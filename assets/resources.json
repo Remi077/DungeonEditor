@@ -1,7 +1,7 @@
 {
     "ATLAS": {
         "ATLAS0": {
-            "url": "./assets/atlas_1024x1024_20x64x64_nopad.json"
+            "url": "./assets/atlas_2048x2048_64x64_nopad.json"
         },
         "MESHTHUMBNAIL": {
             "url": "./assets/thumbnail_atlas.json"

@@ -1,0 +1,131 @@
+{
+  "SIZE": 64,
+  "NUMX": 32,
+  "NUMY": 32,
+  "IMAGES": {
+    "checker.png": {
+      "x": 0,
+      "y": 31
+    },
+    "Chest.png": {
+      "x": 1,
+      "y": 31
+    },
+    "crate.jpg": {
+      "x": 2,
+      "y": 31
+    },
+    "Door.png": {
+      "x": 3,
+      "y": 31
+    },
+    "floorboard.jpg": {
+      "x": 4,
+      "y": 31
+    },
+    "floorplank.png": {
+      "x": 5,
+      "y": 31
+    },
+    "grass.png": {
+      "x": 6,
+      "y": 31
+    },
+    "spritetorch_frame0.png": {
+      "x": 7,
+      "y": 31
+    },
+    "spritetorch_frame1.png": {
+      "x": 8,
+      "y": 31
+    },
+    "spritetorch_frame2.png": {
+      "x": 9,
+      "y": 31
+    },
+    "spritetorch_frame3.png": {
+      "x": 10,
+      "y": 31
+    },
+    "spritetorch_frame4.png": {
+      "x": 11,
+      "y": 31
+    },
+    "spritetorch_frame5.png": {
+      "x": 12,
+      "y": 31
+    },
+    "spritetorch_frame6.png": {
+      "x": 13,
+      "y": 31
+    },
+    "spritetorch_frame7.png": {
+      "x": 14,
+      "y": 31
+    },
+    "spritetorch_frame8.png": {
+      "x": 15,
+      "y": 31
+    },
+    "spritetorch_frame9.png": {
+      "x": 16,
+      "y": 31
+    },
+    "spritetorch_frame10.png": {
+      "x": 17,
+      "y": 31
+    },
+    "spritetorch_frame11.png": {
+      "x": 18,
+      "y": 31
+    },
+    "stonewall.jpg": {
+      "x": 19,
+      "y": 31
+    },
+    "tree.png": {
+      "x": 20,
+      "y": 31
+    },
+    "wall.png": {
+      "x": 21,
+      "y": 31
+    },
+    "wallalcove.png": {
+      "x": 22,
+      "y": 31
+    },
+    "wallchain.png": {
+      "x": 23,
+      "y": 31
+    },
+    "walldark.png": {
+      "x": 24,
+      "y": 31
+    },
+    "walldoor.png": {
+      "x": 25,
+      "y": 31
+    },
+    "wallplanks.png": {
+      "x": 26,
+      "y": 31
+    },
+    "wallpuddle.png": {
+      "x": 27,
+      "y": 31
+    },
+    "wallsewer.png": {
+      "x": 28,
+      "y": 31
+    },
+    "wallseweralpha.png": {
+      "x": 29,
+      "y": 31
+    },
+    "wallsimple.png": {
+      "x": 30,
+      "y": 31
+    }
+  }
+}
