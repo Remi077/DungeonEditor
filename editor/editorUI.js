@@ -124,7 +124,7 @@ document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
 const crosshair = document.getElementById("crosshair");
 document.addEventListener("pointerlockchange", () => {
     if (document.pointerLockElement === Shared.canvas) {
-        console.log("Pointer locked");
+        // console.log("Pointer locked");
 
         // Shared.canvas.removeEventListener("mousemove", crossHairFollow);
         // --- Locked mode: fixed at center ---
@@ -136,7 +136,7 @@ document.addEventListener("pointerlockchange", () => {
 
         // document.addEventListener("mousemove", Shared.onMouseMove, false);
     } else {
-        console.log("Pointer unlocked");
+        // console.log("Pointer unlocked");
         Shared.resetAllActions();
         crosshair.style.display = "none";
         // Shared.canvas.addEventListener("mousemove", crossHairFollow);
@@ -197,12 +197,12 @@ Shared.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 // Track hover state
 /*---------------------------------*/
 Shared.canvas.addEventListener("mouseenter", () => {
-    console.log("mouseenter");
+    // console.log("mouseenter");
     Shared.setIsMouseOverCanvas(true);
 });
 
 Shared.canvas.addEventListener("mouseleave", () => {
-    console.log("mouseleave");
+    // console.log("mouseleave");
     Shared.setIsMouseOverCanvas(false);
 });
 
