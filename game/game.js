@@ -72,7 +72,9 @@ export function stopGameLoop() {
 /*---------------------------------*/
 // gameLoop
 /*---------------------------------*/
-function gameLoop() {
+let lastUVUpdate = 0;
+const uvUpdateInterval = 0.07; // seconds between updates
+function gameLoop(now) {
     const scene = Shared.scene;
     
     if (!Shared.editorState.gameRunning) return;
@@ -113,6 +115,15 @@ function gameLoop() {
         
         //update vertical position
         verticalUpdate(deltaTime);
+
+        //update animated textures
+        // convert ms → seconds
+        const t = now * 0.001;
+        // only update if enough time has passed
+        if (t - lastUVUpdate >= uvUpdateInterval) {
+            Shared.updateAnimatedTextures();
+            lastUVUpdate = t;
+        }
 
         //render scene
         Shared.renderer.setViewport(0, 0, Shared.container.clientWidth, Shared.container.clientHeight);//TODO: you just need to do that once?
