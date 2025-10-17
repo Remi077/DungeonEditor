@@ -116,10 +116,6 @@ let lightMarker;
 let lightMarkerHelper;
 let lightMarkerGroup;
 
-// holds baked chunk geometry
-let chunksInScene = {};
-let spritesInScene = {};
-
 //holds geometry with animated uvs
 // let UVToUpdate = [];
 
@@ -415,6 +411,13 @@ export function startEditorLoop() {
 
     //back to addmode
     setAddMode(ADDPLANEMODE);//by default
+
+
+    document.addEventListener("mousedown", onMouseClick, false);
+    document.addEventListener("mouseup", onMouseUp, false);
+    document.addEventListener("wheel", onMouseWheel, { passive: false });
+
+
 }   
 
 /*---------------------------------*/
@@ -444,6 +447,12 @@ export function stopEditorLoop() {
     //lights
     lightHelperGroup.visible     = false;
     lightMarkerGroup.visible     = false;
+
+    document.removeEventListener("mousedown", onMouseClick, false);
+    document.removeEventListener("mouseup", onMouseUp, false);
+    document.removeEventListener("wheel", onMouseWheel, { passive: false });
+
+
 }
 
 /*---------------------------------*/
@@ -790,10 +799,10 @@ function placeTile(wx,wy,wz,direction,uvmeshid,erase=false,undoable=true) {
 /*---------------------------------*/
 // onMouseClick
 /*---------------------------------*/
-export function onMouseClick(event) {
+function onMouseClick(event) {
 
     if (!Shared.editorState.editorRunning || !Shared.getIsMouseOverCanvas()) return;
-    // console.log("mouseclick");
+    // console.log("editor mouseclick");
 
     if (event.button == 0) {
 
@@ -841,11 +850,11 @@ export function onMouseClick(event) {
 /*---------------------------------*/
 // onMouseUp
 /*---------------------------------*/
-export function onMouseUp(event) {
+function onMouseUp(event) {
 
     if (!Shared.editorState.editorRunning || !Shared.getIsMouseOverCanvas()) return;
 
-    // console.log("mouseup");
+    // console.log("editor mouseup");
 
     if (event.button == 0) {
 
@@ -1225,11 +1234,13 @@ function render_gizmo() {
 function highlightMeshToDelete(){
 
     //If eraser mode set raycast against any geometry
-    raycastChunkArray = Object.values(chunksInScene);
+    raycastChunkArray = Object.values(Shared.chunksInScene);
     // all sprite meshes (flattened)
-    const spriteMeshesArray = Object.values(spritesInScene).flat();
+    const spriteMeshesArray = Object.values(Shared.spritesInScene).flat();
+    const actionnableMeshesArray = Object.values(Shared.actionnablesInScene).flat();
     // merge both
     const raycastTargets = raycastChunkArray.concat(spriteMeshesArray);
+    raycastTargets.concat(actionnableMeshesArray);
     //TO OPTIMIZE: only raycast against chunks in front of Shared.camera instead of all the chunks
 
     //perform the raycast
@@ -1577,7 +1588,7 @@ export function resetLevel() {
     //check if they should persist after reset
     lightGroup.clear();
     lightHelperGroup.clear();
-    deleteAllChunksInScene();
+    deleteAllchunksInScene();
     undogroup = [];
     undogroups.length = 0;
     clearGridMap();
@@ -2447,6 +2458,7 @@ function rebuildDirtyChunks() {
         const facetotilerange = [];
         let faceOffset = 0;
         const spriteMeshes = [];
+        const actionnableMeshes = [];
 
         for (const direction of ["XZ", "YZ", "XY"]) {
             const chunkslice = chunk[direction];
@@ -2538,6 +2550,27 @@ function rebuildDirtyChunks() {
                         const info = {direction,tilexyz,uvmeshid};
                         spriteMesh.userData = {type:"sprite",info};
                         spriteMeshes.push(spriteMesh);
+                    } else if (
+                        meshname.startsWith("DOOR") ||
+                        meshname.startsWith("ITEM")
+                    ){
+                        const actionnableMesh = new THREE.Mesh(sharedgeom, Shared.atlasMat);
+                        if (meshname.startsWith("DOOR")){
+                            const thischild = Shared.atlasMeshArray[meshid][1]?.children[0]?.clone();
+                            actionnableMesh.add(thischild);
+                        }
+                        // spriteMesh.rotation.copy(rot);
+                        actionnableMesh.position.copy(chunkpos);
+                        actionnableMesh.setRotationFromMatrix(rot);
+                        const info = {direction,tilexyz,uvmeshid};
+                        //add function pointer in userdata
+                        // actionnableMesh.userData = {type:"actionnable",info,action:Shared.doSomething};
+                        if (meshname.startsWith("DOOR"))
+                            actionnableMesh.userData = {type:"actionnable",info,action:Shared.openDoor};
+                        else if (meshname.startsWith("ITEM"))
+                            actionnableMesh.userData = {type:"actionnable",info,action:Shared.takeItem};
+                        actionnableMesh.name = meshname;
+                        actionnableMeshes.push(actionnableMesh);                        
                     } else {
                         newgeom=sharedgeom.clone();// we are going to transform the geometry to chunk it together
                         //so clone it from sharedgeom to be safe
@@ -2576,37 +2609,51 @@ function rebuildDirtyChunks() {
             const bakedMesh = new THREE.Mesh(bakedGeometry, Shared.atlasMat);
 
             bakedMesh.userData = {type: "mesh", facetotilerange : facetotilerange}; //store mapping
-            chunksInScene[chunkKey] = bakedMesh;
+            Shared.chunksInScene[chunkKey] = bakedMesh;
             bakedMesh.name = "Chunk_"+chunkKey;
             Shared.chunksGroup.add(bakedMesh);
         }
         for (const spriteMesh of spriteMeshes){
-            if (!spritesInScene[chunkKey]) spritesInScene[chunkKey] = [];
-            spritesInScene[chunkKey].push(spriteMesh);
-            spriteMesh.name = "Sprite_"+spritesInScene[chunkKey].length.toString()+"_"+spriteMesh.userData.uvmeshid;
+            if (!Shared.spritesInScene[chunkKey]) Shared.spritesInScene[chunkKey] = [];
+            Shared.spritesInScene[chunkKey].push(spriteMesh);
+            spriteMesh.name = "Sprite_"+Shared.spritesInScene[chunkKey].length.toString()+"_"+spriteMesh.userData.uvmeshid;
             Shared.chunksGroup.add(spriteMesh);
         }
+        for (const actionnableMesh of actionnableMeshes){
+            if (!Shared.actionnablesInScene[chunkKey]) Shared.actionnablesInScene[chunkKey] = [];
+            Shared.actionnablesInScene[chunkKey].push(actionnableMesh);
+            // actionnableMesh.name = "Actionnable_"+Shared.actionnablesInScene[chunkKey].length.toString()+"_"+actionnableMesh.userData.uvmeshid;
+            Shared.chunksGroup.add(actionnableMesh);
+        }
+
 
         chunk.dirty = false;
     }
 }
 
 function deleteChunkInScene(chunkKey){
-    if (chunkKey in chunksInScene) {
-        Shared.chunksGroup.remove(chunksInScene[chunkKey]);
-        chunksInScene[chunkKey].geometry.dispose();
-        delete chunksInScene[chunkKey];
+    if (chunkKey in Shared.chunksInScene) {
+        Shared.chunksGroup.remove(Shared.chunksInScene[chunkKey]);
+        Shared.chunksInScene[chunkKey].geometry.dispose();
+        delete Shared.chunksInScene[chunkKey];
     }
-    if (chunkKey in spritesInScene) {
-        for (const spriteMesh of spritesInScene[chunkKey]){
+    if (chunkKey in Shared.spritesInScene) {
+        for (const spriteMesh of Shared.spritesInScene[chunkKey]){
             Shared.chunksGroup.remove(spriteMesh);
         }
         //do not call geometry.dispose here as the spritemeshes share them
-        delete spritesInScene[chunkKey];
+        delete Shared.spritesInScene[chunkKey];
+    }   
+    if (chunkKey in Shared.actionnablesInScene) {
+        for (const actionnableMesh of Shared.actionnablesInScene[chunkKey]){
+            Shared.chunksGroup.remove(actionnableMesh);
+        }
+        //do not call geometry.dispose here as the actionnableMeshes share them
+        delete Shared.actionnablesInScene[chunkKey];
     }   
 }
 
-function deleteAllChunksInScene(){
+function deleteAllchunksInScene(){
     for (const chunkKey of gridMapChunk.keys()) {
         deleteChunkInScene(chunkKey);
     }
@@ -2979,7 +3026,7 @@ function setRotation(rotid){
 //                     newmesh.position.copy(chunkpos);
 
 //                     newmesh.userData = {direction:direction,tilexyz:tilexyz,uvmeshid:uvmeshid}; //store mapping
-//                     spritesInScene[chunkKey] = newmesh;
+//                     Shared.spritesInScene[chunkKey] = newmesh;
 //                     newmesh.name = "Sprite_"+chunkKey;
 //                     Shared.spritesGroup.add(newmesh);
 
