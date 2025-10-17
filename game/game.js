@@ -31,6 +31,13 @@ const maxJumpHeight = 0.75;
 const jumpSpeed     = Math.sqrt(2*gravity*maxJumpHeight);
 let   verticalSpeed = 0;
 
+//inventory
+const playerState = {
+    "health": 100,
+    "maxHealth": 100,
+    "inventory": {},
+};
+
 // actions variables
 export let Actions={};
 let gameId = null;
@@ -59,6 +66,10 @@ export function startGameLoop() {
     Shared.clock.start();
     Shared.ambientLight.color.set(Shared.AMBIENTLIGHTGAMECOLOR);
     verticalSpeed = 0;
+
+    document.addEventListener("mousedown", onMouseClick, false);
+    document.addEventListener("mouseup", onMouseUp, false);
+    // document.addEventListener("wheel", onMouseWheel, { passive: false });
 }
 
 /*---------------------------------*/
@@ -67,6 +78,11 @@ export function startGameLoop() {
 export function stopGameLoop() {
     Shared.editorState.gameRunning = false;
     cancelAnimationFrame(gameId);
+
+
+    document.removeEventListener("mousedown", onMouseClick, false);
+    document.removeEventListener("mouseup", onMouseUp, false);
+    // document.removeEventListener("wheel", onMouseWheel, { passive: false });
 }
 
 /*---------------------------------*/
@@ -124,6 +140,9 @@ function gameLoop(now) {
             Shared.updateAnimatedTextures();
             lastUVUpdate = t;
         }
+
+        //raycast against actionnables
+        raycastActionnables();
 
         //render scene
         Shared.renderer.setViewport(0, 0, Shared.container.clientWidth, Shared.container.clientHeight);//TODO: you just need to do that once?
@@ -323,4 +342,58 @@ function verticalUpdate(deltaTime){
 /*---------------------------------*/
 function interact(){
     console.log("interact");
+}
+
+
+let raycastChunkArray = [];
+const raycaster = new THREE.Raycaster();
+const screenCenter = new THREE.Vector2(0, 0); // Center of screen in NDC (Normalized Device Coordinates)
+
+let selectObject = null;
+
+function raycastActionnables(){
+    // console.log("raycastActionnables");
+    selectObject = null;
+    raycastChunkArray = Object.values(Shared.chunksInScene);//to optimize only load nearby chunks
+    const actionnableChunkArray = Object.values(Shared.actionnablesInScene).flat();
+    const raycastTargets = raycastChunkArray.concat(actionnableChunkArray);
+    // const raycastTargets = raycastChunkArray;
+    raycaster.setFromCamera(screenCenter, Shared.camera);
+    let doesIntersect = false;
+    const visibleTargets = raycastTargets.filter(obj => obj.visible);
+    const hits = raycaster.intersectObjects(visibleTargets, false);
+
+    let closestHit = null;
+
+    for (const hit of hits) {
+        if (!closestHit || hit.distance < closestHit.distance) {
+            closestHit = hit;
+        }
+    }
+
+    if (closestHit && closestHit.distance < 3) {
+        doesIntersect = true;
+    }
+
+    if (doesIntersect) {
+        if(closestHit.object?.userData?.type=="actionnable"){
+            selectObject = closestHit.object;
+            console.log("HIT",selectObject.name);
+        }
+        // console.log("HIT");
+        // console.log(closestHit.object?.userData);
+        // closestHit.object?.userData?.action();
+    }
+
+}
+
+function onMouseClick(event) {
+    // console.log("game click");
+    if (selectObject){
+        selectObject?.userData?.action(selectObject, playerState);
+    }
+}
+
+function onMouseUp(event) {
+    // console.log("game mouseup");
 }
