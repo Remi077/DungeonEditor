@@ -163,6 +163,13 @@ gridMap.XY = new Map();
 
 export const gridLight = new Map();
 
+// holds baked chunk geometry
+export const chunksInScene = {};
+export const spritesInScene = {};
+
+//actionnable meshes in scene grouped by chunk
+export const actionnablesInScene = {};
+
 // camera holder: FPS-style rotation system
 export const pitchObject = new THREE.Object3D(); // Up/down rotation (X axis)
 export const yawObject = new THREE.Object3D();   // Left/right rotation (Y axis)
@@ -343,6 +350,7 @@ function stopEditorUI() {
 function startGameLoopUI(){
     canvas.requestPointerLock();
     document.addEventListener("mousemove", onMouseMoveGame, false);
+    canvas.addEventListener("mousedown", onMouseDown);
 }
 function stopGameLoopUI(){
     document.exitPointerLock();
@@ -651,4 +659,154 @@ export function updateAnimatedTextures() {
         // geomToUpdate.userData["uvupdateiter"]=maxiterations;
     }
 
+}
+
+
+
+//game actionnable functions
+export function doSomething(self){
+    console.log("do something");
+}
+
+export function takeItem(self, playerState){
+    self.visible = false;
+
+    const key = self.name;
+    if (!playerState.inventory[key]) {
+        playerState.inventory[key] = 0;
+    }
+
+    playerState.inventory[key]++;
+}
+
+// export const sceneObjToUpdate = [];
+
+export function openDoor(self, playerState) {
+    console.log("openDoor");
+    if (!self?.userData) return;
+
+    //if player has key open door
+    const haskey = playerState.inventory["ITEM_KEY"]
+    if (!haskey){
+        console.log("NOKEY");
+        return;
+    }
+
+
+
+    // Toggle the door state
+    self.userData.isOpen = !self.userData.isOpen;
+
+    // Define 90 degrees in radians
+    const dir = self.userData.isOpen ? 1 : -1;
+    const ninetyDeg = Math.PI / 2;
+
+    // const pivotPosition = self.children[0].position;
+    const pivot = self.children[0];
+    // console.log("pivot.position",pivot.position);
+    const worldPivot = new THREE.Vector3();
+    pivot.getWorldPosition(worldPivot);
+    roundVector3(worldPivot);
+    // console.log("worldPivot.position",worldPivot);
+
+
+    // --- Rotate the door around the pivot ---
+    // rotateAroundPoint(self, worldPivot, new THREE.Vector3(0, 1, 0), dir * ninetyDeg);
+    rotateDoorAroundPivot(self, worldPivot, new THREE.Vector3(0, 1, 0), dir * ninetyDeg, 0.6);
+
+    // if (self.userData.isOpen) {
+    //     // Door just opened → rotate 90° clockwise
+    //     self.rotation.z += ninetyDeg;
+    // } else {
+    //     // Door just closed → rotate 90° counterclockwise
+    //     self.rotation.z -= ninetyDeg;
+    // }
+
+    // // Optional: normalize rotation between 0 and 2π
+    // self.rotation.z = ((self.rotation.z % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+    // Mark object for update
+    // sceneObjToUpdate.push(self);
+}
+
+function rotateAroundPoint(obj, point, axis, angle) {
+    obj.updateWorldMatrix(true, false);
+
+    // Translate so the pivot becomes the origin
+    // console.log("1",obj.position, point);
+
+    obj.position.sub(point);
+    // console.log("2",obj.position);
+    
+    obj.position.applyAxisAngle(axis, angle);
+    // clampVector3(obj.position);
+    roundVector3(obj.position);
+    // console.log("3",obj.position);
+
+    obj.position.add(point);
+    // console.log("4",obj.position);
+
+    // Apply the rotation to the object itself
+    // obj.rotateOnAxis(axis, angle);
+    obj.rotateOnWorldAxis(axis, angle);
+}
+
+
+
+
+// function rotateDoor(door, targetRotation, duration = 1) {
+//   const startRotation = door.rotation.y;
+//   const rotationDelta = targetRotation - startRotation;
+//   const startTime = performance.now();
+
+//   function animate(time) {
+//     const elapsed = (time - startTime) / 1000; // in seconds
+//     const t = Math.min(elapsed / duration, 1); // normalized [0,1]
+
+//     // Linear interpolation
+//     door.rotation.y = startRotation + rotationDelta * t;
+
+//     if (t < 1) {
+//       requestAnimationFrame(animate);
+//     }
+//   }
+
+//   requestAnimationFrame(animate);
+// }
+
+
+
+// function clampVector3(v, epsilon = 1e-6) {
+//     if (Math.abs(v.x) < epsilon) v.x = 0;
+//     if (Math.abs(v.y) < epsilon) v.y = 0;
+//     if (Math.abs(v.z) < epsilon) v.z = 0;
+//     return v;
+// }
+
+function roundVector3(v, precision = 3) {
+    v.x = parseFloat(v.x.toFixed(precision));
+    v.y = parseFloat(v.y.toFixed(precision));
+    v.z = parseFloat(v.z.toFixed(precision));
+}
+
+function rotateDoorAroundPivot(door, pivot, axis, targetAngle, duration = 1) {
+  const startTime = performance.now();
+  let accumulatedAngle = 0;
+
+  function animate(time) {
+    const elapsed = (time - startTime) / 1000; // seconds
+    const t = Math.min(elapsed / duration, 1); // normalized [0,1]
+    const angleToApply = (targetAngle * t) - accumulatedAngle;
+
+    // Rotate the door by the small delta around the pivot
+    rotateAroundPoint(door, pivot, axis, angleToApply);
+
+    accumulatedAngle += angleToApply;
+
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    }
+  }
+
+  requestAnimationFrame(animate);
 }
