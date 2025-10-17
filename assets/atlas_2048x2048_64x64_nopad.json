@@ -31,101 +31,117 @@
       "x": 6,
       "y": 31
     },
-    "spritetorch_frame0.png": {
+    "Item_coinbag.png": {
       "x": 7,
       "y": 31
     },
-    "spritetorch_frame1.png": {
+    "Item_key.png": {
       "x": 8,
       "y": 31
     },
-    "spritetorch_frame2.png": {
+    "Item_sword.png": {
       "x": 9,
       "y": 31
     },
-    "spritetorch_frame3.png": {
+    "Item_vial.png": {
       "x": 10,
       "y": 31
     },
-    "spritetorch_frame4.png": {
+    "spritetorch_frame0.png": {
       "x": 11,
       "y": 31
     },
-    "spritetorch_frame5.png": {
+    "spritetorch_frame1.png": {
       "x": 12,
       "y": 31
     },
-    "spritetorch_frame6.png": {
+    "spritetorch_frame2.png": {
       "x": 13,
       "y": 31
     },
-    "spritetorch_frame7.png": {
+    "spritetorch_frame3.png": {
       "x": 14,
       "y": 31
     },
-    "spritetorch_frame8.png": {
+    "spritetorch_frame4.png": {
       "x": 15,
       "y": 31
     },
-    "spritetorch_frame9.png": {
+    "spritetorch_frame5.png": {
       "x": 16,
       "y": 31
     },
-    "spritetorch_frame10.png": {
+    "spritetorch_frame6.png": {
       "x": 17,
       "y": 31
     },
-    "spritetorch_frame11.png": {
+    "spritetorch_frame7.png": {
       "x": 18,
       "y": 31
     },
-    "stonewall.jpg": {
+    "spritetorch_frame8.png": {
       "x": 19,
       "y": 31
     },
-    "tree.png": {
+    "spritetorch_frame9.png": {
       "x": 20,
       "y": 31
     },
-    "wall.png": {
+    "spritetorch_frame10.png": {
       "x": 21,
       "y": 31
     },
-    "wallalcove.png": {
+    "spritetorch_frame11.png": {
       "x": 22,
       "y": 31
     },
-    "wallchain.png": {
+    "stonewall.jpg": {
       "x": 23,
       "y": 31
     },
-    "walldark.png": {
+    "tree.png": {
       "x": 24,
       "y": 31
     },
-    "walldoor.png": {
+    "wall.png": {
       "x": 25,
       "y": 31
     },
-    "wallplanks.png": {
+    "wallalcove.png": {
       "x": 26,
       "y": 31
     },
-    "wallpuddle.png": {
+    "wallchain.png": {
       "x": 27,
       "y": 31
     },
-    "wallsewer.png": {
+    "walldark.png": {
       "x": 28,
       "y": 31
     },
-    "wallseweralpha.png": {
+    "walldoor.png": {
       "x": 29,
       "y": 31
     },
-    "wallsimple.png": {
+    "wallplanks.png": {
       "x": 30,
       "y": 31
+    },
+    "wallpuddle.png": {
+      "x": 31,
+      "y": 31
+    },
+    "wallsewer.png": {
+      "x": 0,
+      "y": 30
+    },
+    "wallseweralpha.png": {
+      "x": 1,
+      "y": 30
+    },
+    "wallsimple.png": {
+      "x": 2,
+      "y": 30
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "SIZE": 128,
-  "NUMX": 6,
+  "NUMX": 7,
   "NUMY": 6,
   "IMAGES": {
     "Sphere": {
@@ -28,119 +28,135 @@
       "y": 0
     },
     "SpriteTorch": {
-      "x": 0,
-      "y": 1
+      "x": 6,
+      "y": 0
     },
     "Plane": {
-      "x": 1,
+      "x": 0,
       "y": 1
     },
     "PlaneBump": {
-      "x": 2,
+      "x": 1,
       "y": 1
     },
     "PlaneCross": {
-      "x": 3,
+      "x": 2,
       "y": 1
     },
     "PlaneFrame": {
-      "x": 4,
+      "x": 3,
       "y": 1
     },
     "PlaneFrame001": {
-      "x": 5,
+      "x": 4,
       "y": 1
     },
     "PlaneRidge": {
-      "x": 0,
-      "y": 2
+      "x": 5,
+      "y": 1
     },
     "Pillar": {
-      "x": 1,
-      "y": 2
+      "x": 6,
+      "y": 1
     },
     "Pillar45": {
-      "x": 2,
+      "x": 0,
       "y": 2
     },
     "PillarBase": {
-      "x": 3,
+      "x": 1,
       "y": 2
     },
     "PillarBase2": {
-      "x": 4,
+      "x": 2,
       "y": 2
     },
     "Pillarindent": {
-      "x": 5,
+      "x": 3,
       "y": 2
     },
     "PillarRound": {
-      "x": 0,
-      "y": 3
+      "x": 4,
+      "y": 2
     },
     "PillarRoundBase": {
-      "x": 1,
-      "y": 3
+      "x": 5,
+      "y": 2
     },
     "Arch": {
-      "x": 2,
-      "y": 3
+      "x": 6,
+      "y": 2
     },
     "ArchBase": {
-      "x": 3,
+      "x": 0,
       "y": 3
     },
     "ArchBaseBig": {
-      "x": 4,
+      "x": 1,
       "y": 3
     },
     "ArchBigLeft": {
-      "x": 5,
+      "x": 2,
       "y": 3
     },
     "ArchBigRight": {
-      "x": 0,
-      "y": 4
+      "x": 3,
+      "y": 3
     },
     "ArchInside": {
-      "x": 1,
-      "y": 4
+      "x": 4,
+      "y": 3
     },
     "ArchInsideHalf": {
-      "x": 2,
-      "y": 4
+      "x": 5,
+      "y": 3
     },
     "ArchWall": {
-      "x": 3,
-      "y": 4
+      "x": 6,
+      "y": 3
     },
     "dome": {
-      "x": 4,
+      "x": 0,
       "y": 4
     },
     "domehalf": {
-      "x": 5,
+      "x": 1,
       "y": 4
     },
     "domehalfflat": {
+      "x": 2,
+      "y": 4
+    },
+    "domequarter": {
+      "x": 3,
+      "y": 4
+    },
+    "grid": {
+      "x": 4,
+      "y": 4
+    },
+    "gridsquare": {
+      "x": 5,
+      "y": 4
+    },
+    "Chest": {
+      "x": 6,
+      "y": 4
+    },
+    "Item_coinbag": {
       "x": 0,
       "y": 5
     },
-    "domequarter": {
+    "Item_key": {
       "x": 1,
       "y": 5
     },
-    "grid": {
+    "Item_vial": {
       "x": 2,
       "y": 5
     },
-    "gridsquare": {
+    "Item_sword": {
       "x": 3,
-      "y": 5
-    },
-    "Chest": {
-      "x": 4,
       "y": 5
     }
   }
