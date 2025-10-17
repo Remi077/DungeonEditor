@@ -117,9 +117,9 @@ document.addEventListener("contextmenu", (e) => e.preventDefault()); // prevent 
 
 
 // document.getElementById('pointer-lock-hint').style.display = 'block';
-document.addEventListener("mousedown", Editor.onMouseClick, false);
-document.addEventListener("mouseup", Editor.onMouseUp, false);
-document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
+// document.addEventListener("mousedown", Editor.onMouseClick, false);
+// document.addEventListener("mouseup", Editor.onMouseUp, false);
+// document.addEventListener("wheel", Editor.onMouseWheel, { passive: false });
 
 const crosshair = document.getElementById("crosshair");
 document.addEventListener("pointerlockchange", () => {
