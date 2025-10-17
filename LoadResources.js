@@ -227,13 +227,14 @@ function loadMeshAtlas(loader, src) {
             src,
             (gltf) => {
                 const scene = gltf.scene;
+                // scene.scale.set(0.5, 0.5, 0.5);
                 const meshMap = {};
 
                 scene.traverse((child) => {
                     if (child.isMesh) {
                         // child.scale.set(0.5, 0.5, 0.5);
                         // child.geometry.translate(1,0,1);
-                        child.geometry.scale(0.5, 0.5, 0.5);
+                        // child.geometry.scale(0.5, 0.5, 0.5);
 
 
                         //Blender +Y (forward) ⟶ Three.js −Z (forward)
@@ -248,7 +249,11 @@ function loadMeshAtlas(loader, src) {
                         child.geometry.attributes.uv.needsUpdate = true;
 
                         meshMap[child.name.toUpperCase()] = child;
-                    }
+                    } 
+                    // else if (!child.isMesh && !child.isLight && !child.isCamera && child !== scene) {
+                    //     // child.position.multiplyScalar(0.5);
+                    //     scaleAndClampPosition(child, 0.5);
+                    // }
                 });
 
                 resolve(meshMap); // resolves AFTER traversal is done
@@ -259,6 +264,12 @@ function loadMeshAtlas(loader, src) {
     });
 }
 
+function scaleAndClampPosition(obj, scale, precision = 3) {
+    obj.position.multiplyScalar(scale);
+    obj.position.x = parseFloat(obj.position.x.toFixed(precision));
+    obj.position.y = parseFloat(obj.position.y.toFixed(precision));
+    obj.position.z = parseFloat(obj.position.z.toFixed(precision));
+}
 
 /*---------------------------------------------------------*/
 /* loadMeshes */
