@@ -361,7 +361,7 @@ function raycastActionnables(){
     raycaster.setFromCamera(screenCenter, Shared.camera);
     let doesIntersect = false;
     const visibleTargets = raycastTargets.filter(obj => obj.visible);
-    const hits = raycaster.intersectObjects(visibleTargets, false);
+    const hits = raycaster.intersectObjects(visibleTargets, true);//true means recursive raycast, it parses children too
 
     let closestHit = null;
 
@@ -376,8 +376,14 @@ function raycastActionnables(){
     }
 
     if (doesIntersect) {
+
         if(closestHit.object?.userData?.type=="actionnable"){
             selectObject = closestHit.object;
+            let parentActionnable = selectObject;
+            while (parentActionnable && !actionnableChunkArray.includes(parentActionnable)) {
+                parentActionnable = parentActionnable.parent;
+            }
+            selectObject = parentActionnable || selectObject;
             console.log("HIT",selectObject.name);
         }
         // console.log("HIT");

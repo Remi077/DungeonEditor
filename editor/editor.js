@@ -306,9 +306,16 @@ export function setupEditor() {
     markerGeom = generateDefaultGeometry();
 
     //by default
-    markerxz = new THREE.Mesh(markerGeom, markerxzmaterial);
-    markeryz = new THREE.Mesh(markerGeom, markeryzmaterial);
-    markerxy = new THREE.Mesh(markerGeom, markerxymaterial);
+    // markerxz = new THREE.Mesh(markerGeom, markerxzmaterial);
+    // markeryz = new THREE.Mesh(markerGeom, markeryzmaterial);
+    // markerxy = new THREE.Mesh(markerGeom, markerxymaterial);
+    markerxz = markerGeom.clone(true)
+    markeryz = markerGeom.clone(true)
+    markerxy = markerGeom.clone(true)
+    markerxz.traverse((child) => {if (child.isMesh) child.material = markerxzmaterial;});
+    markeryz.traverse((child) => {if (child.isMesh) child.material = markeryzmaterial;});
+    markerxy.traverse((child) => {if (child.isMesh) child.material = markerxymaterial;});
+
     setMeshPosition();
 
     markerxz.name = "markerxz"
@@ -324,9 +331,9 @@ export function setupEditor() {
     markergroupyz.visible = showMarkerYZ;
     markergroupxy.visible = showMarkerXY;
 
-    markergroupxz.add(markerxz.clone());
-    markergroupyz.add(markeryz.clone());
-    markergroupxy.add(markerxy.clone());
+    markergroupxz.add(markerxz.clone(true));
+    markergroupyz.add(markeryz.clone(true));
+    markergroupxy.add(markerxy.clone(true));
 
     Shared.scene.add(markergroupxz);
     Shared.scene.add(markergroupyz);
@@ -640,15 +647,48 @@ export function setMeshFromMeshName(meshname){
 
 export function setMesh(rotid, uvid, meshid) {
 
-    markerGeom.dispose();
-    markerGeom = generateGeometry(rotid,uvid,meshid);
+    // Dispose old geometries in markerGeom
+    markerGeom.traverse((child) => {
+        if (child.isMesh && child.geometry) {
+            child.geometry.dispose();
+        }
+    });
 
-    markerxz.geometry = markerGeom;
-    markeryz.geometry = markerGeom;
-    markerxy.geometry = markerGeom;
+    // Generate new geometry hierarchy
+    markerGeom = generateGeometry(rotid, uvid, meshid);
 
+    [["markerxz", markerxz], ["markeryz", markeryz], ["markerxy", markerxy]].forEach(([name, marker]) => {
+        const pos   = marker.position.clone();
+        const rot   = marker.rotation.clone();
+        const scale = marker.scale.clone();
+
+        // Save material from first mesh
+        const firstMesh = marker.getObjectByProperty('isMesh', true);
+        const oldMaterial = firstMesh ? firstMesh.material : null;
+
+        // Replace with cloned geometry
+        const newMarker = markerGeom.clone(true);
+
+        // Restore transform
+        newMarker.position.copy(pos);
+        newMarker.rotation.copy(rot);
+        newMarker.scale.copy(scale);
+
+        // Restore materials
+        newMarker.traverse(child => {
+            if (child.isMesh && oldMaterial) {
+                child.material = oldMaterial;
+            }
+        });
+
+        // Update the global variable
+        if (name === "markerxz") markerxz = newMarker;
+        if (name === "markeryz") markeryz = newMarker;
+        if (name === "markerxy") markerxy = newMarker;
+    });
+
+    // Reinit and render
     reinitMarker();
-
     Shared.editorState.renderOneFrame = true;
 }
 
@@ -706,7 +746,8 @@ const worldPos = new THREE.Vector3();
 function placeTileFromMesh(tilemesh, direction, erase=false) {
 
     tilemesh.getWorldPosition(worldPos);
-    let uvmeshid = tilemesh.geometry.userData.uvmeshid;
+    // let uvmeshid = tilemesh.geometry.userData.uvmeshid;
+    let uvmeshid = tilemesh.userData.uvmeshid;
     let wx = Math.floor(worldPos.x / Shared.cellSize);
     let wy = Math.floor(worldPos.y / Shared.cellSize);
     let wz = Math.floor(worldPos.z / Shared.cellSize);
@@ -942,7 +983,7 @@ function reinitMarker() {
     //reinit marker
     //RED
     markergroupxz.clear();
-    markergroupxz.add(markerxz.clone());
+    markergroupxz.add(markerxz.clone(true));
     markergroupxz.position.set(selectX, Shared.floorHeight, selectZ);
 
     //GREEN
@@ -954,9 +995,9 @@ function reinitMarker() {
     //leave the UV non scaled for the mandatory uv2 field
     //based on height swap material from atlasMat to atlasMapAO
     //this enables better separation
-    markergroupyz.add(markeryz.clone());
+    markergroupyz.add(markeryz.clone(true));
     for (let y = 1; y < Shared.wallHeight; y++) {
-        const t = markeryz.clone();
+        const t = markeryz.clone(true);
         t.position.y += y;
         markergroupyz.add(t);
     }
@@ -964,9 +1005,9 @@ function reinitMarker() {
 
     //BLUE
     markergroupxy.clear();
-    markergroupxy.add(markerxy.clone());
+    markergroupxy.add(markerxy.clone(true));
     for (let y = 1; y < Shared.wallHeight; y++) {
-        const t = markerxy.clone();
+        const t = markerxy.clone(true);
         t.position.y += y;
         markergroupxy.add(t);
     }
@@ -1303,7 +1344,9 @@ function highlightMeshToDelete(){
             const uvmeshidrot0 = selectInfo.uvmeshid; //TEMP: find a way to optimize this, ie only register
             //unique geometries indepedently from rotation. pb is that this breaks save/load at the moment 
             if (Shared.sceneGeometryDict.has(uvmeshidrot0)) {
-                selectObj = new THREE.Mesh(Shared.sceneGeometryDict.get(uvmeshidrot0).clone(), markerremovematerial);
+                // selectObj = new THREE.Mesh(Shared.sceneGeometryDict.get(uvmeshidrot0).clone(true), markerremovematerial);
+                selectObj = Shared.sceneGeometryDict.get(uvmeshidrot0).clone(true);
+                selectObj.traverse((child) => {if (child.isMesh) child.material = markerremovematerial;});
             } else {
                 //should not go there normally but support it just in case
                 // const { rotid, uvid, meshid } = Shared.decodeID(selectInfo.uvmeshid);
@@ -1424,7 +1467,7 @@ function updateMarker(){
                 if (showMarkerXZ) {
                     for (let x = 0; x <= scaleX; x++) {
                         for (let z = 0; z <= scaleZ; z++) {
-                            const copytile = markerxz.clone();
+                            const copytile = markerxz.clone(true);
                             markergroupxz.add(copytile);
                             copytile.position.set(x + Shared.cellSize / 2, 0, z + Shared.cellSize / 2);
                         }
@@ -1445,7 +1488,7 @@ function updateMarker(){
                             }
                             for (let y = 0; y < Shared.wallHeight; y++) {
                                 if (todelete) continue;
-                                const copytile = markeryz.clone();
+                                const copytile = markeryz.clone(true);
                                 markergroupyz.add(copytile);
                                 copytile.position.copy(markeryz.position);
                                 copytile.position.x += x;
@@ -1468,7 +1511,7 @@ function updateMarker(){
                             }
                             for (let y = 0; y < Shared.wallHeight; y++) {
                                 if (todelete) continue;
-                                const copytile = markerxy.clone();
+                                const copytile = markerxy.clone(true);
                                 markergroupxy.add(copytile);
                                 copytile.position.copy(markerxy.position);
                                 copytile.position.x += x;
@@ -2250,41 +2293,37 @@ function generateUV(uv,uvid){
 /*---------------------------------*/
 
 function generateGeometry(rotid,uvid,meshid) {
-    let m = (Shared.atlasMeshArray[meshid][1]?.geometry).clone();
-    // let uv = m.attributes.uv.clone();
+    // Clone the parent object (deep clone)
+    const parent = Shared.atlasMeshArray[meshid][1].clone(true);
 
-    // const xt = (Shared.atlasUVsArray[uvid][1]?.x || 0);
-    // const yt = (Shared.atlasUVsArray[uvid][1]?.y || 0);
-    
-    let geomuv = m.attributes.uv.clone();
-    let uv = generateUV(geomuv,uvid);
+    // Traverse all children in the hierarchy and scale/offset their UV to the desired atlas location
+    parent.traverse((child) => {
+        if (child.isMesh && child.geometry && child.geometry.attributes.uv) {
+            // Clone the geometry so each mesh has independent UVs
+            child.geometry = child.geometry.clone();
 
-    // const offsetX = xt * Shared.uvInfo.uvscalex;
-    // const offsetY = yt * Shared.uvInfo.uvscaley;
-    // for (let i = 0; i < uv.count; i++) {
-    //     let x = uv.getX(i);
-    //     let y = uv.getY(i);
-    //     // Scale down to tile size
-    //     x = x * Shared.uvInfo.uvscalex;
-    //     y = y * Shared.uvInfo.uvscaley;
-    //     // Offset to desired tile
-    //     x += offsetX;
-    //     y += offsetY;
-    //     uv.setXY(i, x, y);
-    // }
-    // uv.needsUpdate = true;
-    m.attributes.uv = uv;
+            // Clone the UV attribute
+            const geomuv = child.geometry.attributes.uv.clone();
+
+            // Generate your modified UVs
+            const uv = generateUV(geomuv, uvid);
+
+            // Assign back and flag for update
+            child.geometry.setAttribute('uv', uv);
+            child.geometry.attributes.uv.needsUpdate = true;
+        }
+    });
 
     const newmeshname = Shared.atlasMeshArray[meshid][0];
     const newuvname = Shared.atlasUVsArray[uvid][0];
     const newuvmeshid = Shared.encodeID(uvid,meshid,rotid);
-    m.userData = {
+    parent.userData = {
         uvname: newuvname,
         meshname: newmeshname,
         uvmeshid: newuvmeshid
     };
 
-    return m;
+    return parent;
 }
 
 /*---------------------------------*/
@@ -2454,72 +2493,37 @@ function rebuildDirtyChunks() {
         // remove old mesh if exists
         deleteChunkInScene(chunkKey);
 
-        const tileGeometries = [];
-        const facetotilerange = [];
-        let faceOffset = 0;
-        const spriteMeshes = [];
+        const tileGeometries    = [];
+        const facetotilerange   = [];
+        let   faceOffset        = 0;
+        const spriteMeshes      = [];
         const actionnableMeshes = [];
 
         for (const direction of ["XZ", "YZ", "XY"]) {
             const chunkslice = chunk[direction];
-            // const { rot, pos: offset } = RotOffsetPerSlice[direction];
-            // const { rot, pos: offset } = RotOffsetPerSlice(direction,0);
 
             for (const [tilexyz, tilemeshes] of chunkslice.entries()) {
                 const { x, y, z } = Shared.parseGridKey(tilexyz);
 
-                // chunkpos.set(
-                //     offset.x + Shared.cellSize * x,
-                //     offset.y + Shared.cellSize * y,
-                //     offset.z + Shared.cellSize * z
-                // );
-
-                // chunkmatrix.copy(rot).setPosition(chunkpos);
-
                 for (const [meshname,uvmeshid] of Object.entries(tilemeshes)) {
 
-                    // if (meshname.startsWith("SPRITE")){
-                    //     // console.log(meshname);
-                    //     continue;//do not chunk the sprites
-                    // }
-
                     const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
-                    // const uvmeshidrot0 = Shared.encodeID(uvid,meshid);
                     const uvmeshidrot0 = uvmeshid; //TEMP: find a way to optimize this, ie only register
-                    //unique geometries indepedently from rotation. pb is that this breaks save/load at the moment 
+                    //unique geometries independently from rotation. pb is that this breaks save/load at the moment 
+
                     let sharedgeom;
                     let newgeom;
                     //clone from cache if 
                     if (Shared.sceneGeometryDict.has(uvmeshidrot0)) {
                         sharedgeom = Shared.sceneGeometryDict.get(uvmeshidrot0);
                     } else {
-                        // const { rotid, uvid, meshid } = Shared.decodeID(uvmeshid);
                         sharedgeom = generateGeometry(0, uvid, meshid);
                         Shared.sceneGeometryDict.set(uvmeshidrot0, sharedgeom);
 
                         // check anim
                         let uvname = Shared.atlasUVsArray[uvid][0]; // actual string key
-                        // let isFrame = uvname?.endsWith("framed+");
                         let isFirstFrame = uvname?.endsWith("_FRAME0");
                         if (isFirstFrame) {
-                            // const prefix = uvname.replace(/_FRAME\d+$/, "");
-
-                            // // find all frame keys
-                            // const frames = Shared.atlasUVsArray
-                            //     .map(([key]) => key) // get the string names
-                            //     .filter(key => key.startsWith(prefix) && /_FRAME\d+$/.test(key))
-                            //     .sort((a, b) => {
-                            //         const na = parseInt(a.match(/_FRAME(\d+)$/)[1], 10);
-                            //         const nb = parseInt(b.match(/_FRAME(\d+)$/)[1], 10);
-                            //         return na - nb;
-                            //     });
-
-                            // // now convert keys -> uvids
-                            // const uvframes = frames.map(fkey => {
-                            //     const frameuvid = Shared.atlasUVsidx[fkey]; // lookup index by key
-                            //     let newuv = Shared.atlasMeshArray[meshid][1]?.geometry.attributes.uv.clone();
-                            //     return generateUV(newuv,frameuvid);
-                            // });
                             const uvframes = generateAnimatedTextures(uvname,meshid);
 
                             Shared.UVToUpdate.push({
@@ -2539,11 +2543,10 @@ function rebuildDirtyChunks() {
                     );
 
 
-
-
-
                     if (meshname.startsWith("SPRITE")){
-                        const spriteMesh = new THREE.Mesh(sharedgeom, Shared.atlasMatTransp);
+                        // const spriteMesh = new THREE.Mesh(sharedgeom, Shared.atlasMatTransp);
+                        const spriteMesh = sharedgeom.clone(true);
+                        spriteMesh.traverse((child) => {if (child.isMesh) child.material = Shared.atlasMatTransp;});
                         // spriteMesh.rotation.copy(rot);
                         spriteMesh.position.copy(chunkpos);
                         spriteMesh.setRotationFromMatrix(rot);
@@ -2552,30 +2555,53 @@ function rebuildDirtyChunks() {
                         spriteMeshes.push(spriteMesh);
                     } else if (
                         meshname.startsWith("DOOR") ||
-                        meshname.startsWith("ITEM")
+                        meshname.startsWith("ITEM") ||
+                        meshname.startsWith("CHEST")
                     ){
-                        const actionnableMesh = new THREE.Mesh(sharedgeom, Shared.atlasMat);
-                        if (meshname.startsWith("DOOR")){
-                            const thischild = Shared.atlasMeshArray[meshid][1]?.children[0]?.clone();
-                            actionnableMesh.add(thischild);
-                        }
+                        // const actionnableMesh = new THREE.Mesh(sharedgeom, Shared.atlasMat);
+                        const actionnableMesh = sharedgeom.clone(true);
+                        actionnableMesh.traverse((child) => {if (child.isMesh) child.material = Shared.atlasMat;});
+                        // if (meshname.startsWith("DOOR")){
+                        //     //TOFIX!!
+                        //     const thischild = Shared.atlasMeshArray[meshid][1]?.children[0]?.clone();
+                        //     actionnableMesh.add(thischild);
+                        // }
                         // spriteMesh.rotation.copy(rot);
                         actionnableMesh.position.copy(chunkpos);
                         actionnableMesh.setRotationFromMatrix(rot);
                         const info = {direction,tilexyz,uvmeshid};
                         //add function pointer in userdata
                         // actionnableMesh.userData = {type:"actionnable",info,action:Shared.doSomething};
-                        if (meshname.startsWith("DOOR"))
-                            actionnableMesh.userData = {type:"actionnable",info,action:Shared.openDoor};
-                        else if (meshname.startsWith("ITEM"))
-                            actionnableMesh.userData = {type:"actionnable",info,action:Shared.takeItem};
+                        if (meshname.startsWith("DOOR")){
+                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.openDoor};});
+                            // actionnableMesh.userData = {type:"actionnable",info,action:Shared.openDoor};
+                        }else if (meshname.startsWith("ITEM")){
+                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.takeItem};});
+                            // actionnableMesh.userData = {type:"actionnable",info,action:Shared.takeItem};
+                        }else if (meshname.startsWith("CHEST")){
+                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.openChest};});
+                            // actionnableMesh.userData = {type:"actionnable",info,action:Shared.takeItem};
+                        }
                         actionnableMesh.name = meshname;
                         actionnableMeshes.push(actionnableMesh);                        
                     } else {
-                        newgeom=sharedgeom.clone();// we are going to transform the geometry to chunk it together
+                        // we are going to transform the geometry to chunk it together
                         //so clone it from sharedgeom to be safe
-                        chunkmatrix.copy(rot).setPosition(chunkpos);
-                        newgeom.applyMatrix4(chunkmatrix);
+                        //verify here that its only one mesh with no child!!
+
+                        // newgeom=sharedgeom.clone(true);
+                        // chunkmatrix.copy(rot).setPosition(chunkpos);
+                        // newgeom.applyMatrix4(chunkmatrix);
+                        if (!(sharedgeom.isMesh && sharedgeom.children.length === 0)) {
+                            console.error("sharedgeom is not a single mesh or has children!");
+                        } else {
+                            // Safe to clone and apply matrix
+                            newgeom = sharedgeom.geometry.clone();
+                            chunkmatrix.copy(rot).setPosition(chunkpos);
+                            newgeom.applyMatrix4(chunkmatrix);
+                        }
+
+
 
                         // how many triangles does this tile contribute?
                         const triCount = newgeom.index

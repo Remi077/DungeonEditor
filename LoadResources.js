@@ -90,6 +90,7 @@ function loadAtlas(jsonUrl) {
         texture.magFilter = THREE.NearestFilter;
         // texture.minFilter = THREE.NearestFilter; // optional, if you also want it on minification
         texture.needsUpdate = true;
+        texture.name = "ATLASTEXTURE";
 
         // const material = new THREE.MeshBasicMaterial({
         const material = new THREE.MeshLambertMaterial({
@@ -227,36 +228,33 @@ function loadMeshAtlas(loader, src) {
             src,
             (gltf) => {
                 const scene = gltf.scene;
-                // scene.scale.set(0.5, 0.5, 0.5);
                 const meshMap = {};
 
+                // First, fix UVs on all meshes
+                //Blender +Y (forward) ⟶ Three.js −Z (forward) 
+                //Blender +Z (up) ⟶ Three.js +Y (up) 
+                //Blender +X (right) ⟶ Three.js +X (right) 
+                //because of the UV forward flip we rotate them 180 degrees at import
                 scene.traverse((child) => {
-                    if (child.isMesh) {
-                        // child.scale.set(0.5, 0.5, 0.5);
-                        // child.geometry.translate(1,0,1);
-                        // child.geometry.scale(0.5, 0.5, 0.5);
-
-
-                        //Blender +Y (forward) ⟶ Three.js −Z (forward)
-                        //Blender +Z (up)      ⟶ Three.js +Y (up)
-                        //Blender +X (right)   ⟶ Three.js +X (right)
-                        //because of the UV forward flip we rotate them 180 degrees at import
-                        child.geometry.attributes.uv.array.forEach((val, i) => {
-                            if (i % 2 === 1) { // every second number = V coordinate
-                                child.geometry.attributes.uv.array[i] = 1 - val;
-                            }
-                        });
-                        child.geometry.attributes.uv.needsUpdate = true;
-
-                        meshMap[child.name.toUpperCase()] = child;
-                    } 
-                    // else if (!child.isMesh && !child.isLight && !child.isCamera && child !== scene) {
-                    //     // child.position.multiplyScalar(0.5);
-                    //     scaleAndClampPosition(child, 0.5);
-                    // }
+                    if (child.isMesh && child.geometry && child.geometry.attributes.uv) {
+                        const uvAttr = child.geometry.attributes.uv;
+                        const uvArray = uvAttr.array;
+                        for (let i = 1; i < uvArray.length; i += 2) {
+                            uvArray[i] = 1 - uvArray[i]; // flip V coordinate
+                        }
+                        uvAttr.needsUpdate = true;
+                    }
                 });
 
-                resolve(meshMap); // resolves AFTER traversal is done
+                // Then collect only top-level parents (immediate children of the scene)
+                scene.children.forEach((child) => {
+                    // You can filter types if needed, e.g. skip lights/cameras
+                    if (!child.isLight && !child.isCamera) {
+                        meshMap[child.name?.toUpperCase()] = child;
+                    }
+                });
+
+                resolve(meshMap);
             },
             undefined, // onProgress
             (error) => reject(error)
