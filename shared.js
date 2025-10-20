@@ -186,7 +186,7 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = true;
+    let online = false;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
@@ -654,8 +654,16 @@ export function updateAnimatedTextures() {
         let { geomToUpdate, uvs, curidx } = obj;
         obj.curidx = (curidx + 1) % uvs.length; // advance safely in loop
         // console.log(obj.curidx);
-        geomToUpdate.attributes.uv = uvs[obj.curidx];
-        geomToUpdate.attributes.uv.needsUpdate = true; // <-- required
+        // geomToUpdate.attributes.uv = uvs[obj.curidx];
+        // geomToUpdate.attributes.uv.needsUpdate = true; // <-- required
+
+        geomToUpdate.traverse((child) => {
+            if (child.isMesh && child.geometry && child.geometry.attributes.uv) {
+                child.geometry.attributes.uv = uvs[obj.curidx];
+                child.geometry.attributes.uv.needsUpdate = true;
+            }
+        })
+
         // geomToUpdate.userData["uvupdateiter"]=maxiterations;
     }
 

@@ -1641,6 +1641,13 @@ export function resetLevel() {
     reinitMarker();
     // Shared.resetCamera();
     Shared.editorState.renderOneFrame = true;//simply update once the Shared.canvas
+
+
+    const sceneGeometryDictArray = Array.from(Shared.sceneGeometryDict.entries());
+    for (const i of sceneGeometryDictArray){
+        let obj = i[1];
+        obj.traverse((child) => {if (child.isMesh) child.geometry.dispose();})
+    }
     Shared.sceneGeometryDict.clear();
 }
 
@@ -2725,7 +2732,7 @@ function buildMaze() {
     // const walluvmeshid = getUvMeshId("WALL", "PLANE");
     const { rotid, uvid, meshid } = Shared.decodeID(mazeWallUvMeshId);
     const matname = Shared.atlasUVsArray[uvid][0];
-    const pillaruvmeshid = getUvMeshId(matname, "ArchBase");
+    const pillaruvmeshid = getUvMeshId(matname, "ARCHBASE");
     
     const sidel = parseInt(document.getElementById("MazeSize").value, 10);
     const minX = -sidel, maxX = sidel;
@@ -2961,8 +2968,8 @@ function buildMaze() {
             placeTile(x, 0, z, "XZ", mazeFloorUvMeshId, false, false);
             // placeTile(x, maxY, z, "XZ", mazeFloorUvMeshId, false, false);
         }
-        if (!room) placeTile(x,0,z,"XZ",pillaruvmeshid,false,false);
         for (let y = 0; y <= maxY; y++) {
+            if (!room) placeTile(x,y,z,"XZ",pillaruvmeshid,false,false);
             if (north) placeTile(x, y, z, "XY", mazeWallUvMeshId, false, false);
             if (south) placeTile(x, y, z + 1, "XY", mazeWallUvMeshId, false, false);
             if (west) placeTile(x, y, z, "YZ", mazeWallUvMeshId, false, false);
@@ -3094,10 +3101,15 @@ function generateAnimatedTextures(uvname,meshid){
 }
 
 function clearAnimatedTextures() {
-    for (const { uvs } of Shared.UVToUpdate) {
-        for (const attr of uvs) {
-            attr.dispose();
-        }
-    }
+    // for (const obj of Shared.UVToUpdate) {
+    //     const { geomToUpdate, uvs } = obj;
+    //     if (!uvs) continue;
+    //     // Remove references from the geometry
+    //     if (geomToUpdate && geomToUpdate.attributes) {
+    //         for (const attrName of uvs.map((_, i) => Object.keys(geomToUpdate.attributes)[i])) {
+    //             delete geomToUpdate.attributes[attrName];
+    //         }
+    //     }
+    // }
     Shared.UVToUpdate.length = 0; // clear in place
 }
