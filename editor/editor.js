@@ -1378,8 +1378,9 @@ function highlightMeshToDelete(){
     const spriteMeshesArray = Object.values(Shared.spritesInScene).flat();
     const actionnableMeshesArray = Object.values(Shared.actionnablesInScene).flat();
     // merge both
-    const raycastTargets = raycastChunkArray.concat(spriteMeshesArray);
-    raycastTargets.concat(actionnableMeshesArray);
+    const raycastTargets = raycastChunkArray
+    .concat(spriteMeshesArray)
+    .concat(actionnableMeshesArray);
     //TO OPTIMIZE: only raycast against chunks in front of Shared.camera instead of all the chunks
 
     //perform the raycast
@@ -1388,7 +1389,8 @@ function highlightMeshToDelete(){
     raycaster.setFromCamera(mouse, Shared.camera);
     let doesIntersect = false;
     // const hits = raycaster.intersectObjects(raycastChunkArray, false);
-    const hits = raycaster.intersectObjects(raycastTargets, false);
+    // const visibleTargets = raycastTargets.filter(obj => obj.visible);
+    const hits = raycaster.intersectObjects(raycastTargets, true);//recursive search
 
     let closestHit = null;
 
@@ -1405,6 +1407,7 @@ function highlightMeshToDelete(){
     if (doesIntersect) {
 
         const hitType = closestHit.object?.userData?.type;
+        console.log("HIT ",hitType);
 
         switch (hitType) {
             case "mesh": {
