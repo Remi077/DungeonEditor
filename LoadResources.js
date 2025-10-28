@@ -1,5 +1,7 @@
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+// import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
+// import RAPIER from 'https://esm.sh/@dimforge/rapier3d-compat@0.12.0';
 import {GLTFLoader} from './utils/GLTFLoader.js'
 import {FBXLoader} from './utils/FBXLoader.js'
 //OTHER IMPORTS FORBIDDEN
@@ -236,7 +238,9 @@ function loadMeshAtlas(loader, src) {
                 //Blender +X (right) ⟶ Three.js +X (right) 
                 //because of the UV forward flip we rotate them 180 degrees at import
                 scene.traverse((child) => {
-                    if (child.isMesh && child.geometry && child.geometry.attributes.uv) {
+                    if (child.isMesh && child.geometry && child.geometry.attributes.uv &&
+                        !child.name.startsWith("Collider_")
+                    ) {
                         const uvAttr = child.geometry.attributes.uv;
                         const uvArray = uvAttr.array;
                         for (let i = 1; i < uvArray.length; i += 2) {
@@ -246,13 +250,77 @@ function loadMeshAtlas(loader, src) {
                     }
                 });
 
-                // Then collect only top-level parents (immediate children of the scene)
+                // --- Step 2: Build a map of colliders first ---
+                const colliders = {};
+                scene.updateMatrixWorld(true); // make sure world transforms are up-to-date
                 scene.children.forEach((child) => {
-                    // You can filter types if needed, e.g. skip lights/cameras
-                    if (!child.isLight && !child.isCamera) {
-                        meshMap[child.name?.toUpperCase()] = child;
+                    if (child.isMesh && child.name.startsWith("Collider_")) {
+                        const baseName = child.name.replace(/^Collider_/, "").toUpperCase();
+
+                        const position = new THREE.Vector3();
+                        const quaternion = new THREE.Quaternion();
+                        const scale = new THREE.Vector3();
+                        child.matrixWorld.decompose(position, quaternion, scale);
+
+                        // Compute geometry bounds (in local space)
+                        child.geometry.computeBoundingBox();
+
+                        // Apply local transform to get world size
+                        const bbox = child.geometry.boundingBox.clone();
+                        bbox.applyMatrix4(child.matrixWorld);
+
+                        const size = new THREE.Vector3();
+                        bbox.getSize(size);
+                        const center = new THREE.Vector3();
+                        bbox.getCenter(center);
+
+                        // Half extents for Rapier
+                        const halfExtents = {
+                        x: size.x * 0.5,
+                        y: size.y * 0.5,
+                        z: size.z * 0.5,
+                        };
+
+                        // // Create collider
+                        // const colliderDesc = RAPIER.ColliderDesc.cuboid(
+                        // halfExtents.x,
+                        // halfExtents.y,
+                        // halfExtents.z
+                        // )
+                        // .setTranslation(center.x, center.y, center.z)
+                        // .setRotation(quaternion);
+
+                        // // Optionally: hide collider mesh in Three.js
+                        // // child.visible = false;
+
+                        // colliders[baseName] = colliderDesc;
+                        // When building the atlas
+                        colliders[baseName] = {
+                        halfExtents: halfExtents,
+                        localOffset: center.clone(),
+                        localRotation: quaternion.clone()
+                        };
+
+
                     }
                 });
+
+                // --- Step 3: Collect visible meshes and pair them with colliders ---
+                scene.children.forEach((child) => {
+                    if (
+                        // child.isMesh &&//this can be a empty object or armature holding a hierarchy 
+                        !child.name.startsWith("Collider_") &&
+                        !child.isLight &&
+                        !child.isCamera
+                    ) {
+                        const name = child.name.toUpperCase();
+                        meshMap[name] = {
+                            MESH: child,
+                            COLLIDER: colliders[name] || null
+                        };
+                    }
+                });
+
 
                 resolve(meshMap);
             },

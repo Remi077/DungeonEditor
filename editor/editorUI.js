@@ -2,6 +2,7 @@
 import * as Shared from '../shared.js';
 import * as Editor from './editor.js';
 import * as GameHUD from '../game/gameHUD.js';
+import * as Stats from '../Stats.js';
 
 
 /*-----------------------------------------------------*/
@@ -245,15 +246,21 @@ document.addEventListener("UIChange", (e) => {
                 case Shared.MODEMENU:
                     //hide the uipanel in game mode and resize renderer
                     Shared.uipanel.classList.add("hidden");
+                    // document.getElementById('canvas-container').appendChild(Stats.stats.dom);
                     break;      
                 case Shared.MODEEDITOR:
                     //re-add the uipanel in editor mode and resize renderer
                     Shared.uipanel.classList.remove("hidden");
+                    Stats.dockStats(true);
+                    // document.getElementById('ui-panel').appendChild(Stats.stats.dom);
                     break;
                 case Shared.MODEGAME:
                     //hide the uipanel in game mode and resize renderer
                     Shared.uipanel.classList.add("hidden");
-                    break;                    
+                    Stats.dockStats(false);
+                    // document.getElementById('canvas-container').appendChild(Stats.stats.dom);
+                    // document.getElementById('canvas-container').appendChild(Stats.stats.dom);
+                    break;
                 default:
                     console.warn("game mode unsupported:", value);
                     break;

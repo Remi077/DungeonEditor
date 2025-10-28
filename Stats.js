@@ -7,13 +7,37 @@ import * as Shared from './shared.js';
 /*-----------------------------------------------------*/
 
 export const stats = new Stats();
-stats.dom.style.position = 'relative'; // <-- remove fixed position
-stats.dom.style.top = 'auto';
-stats.dom.style.left = 'auto';
-stats.dom.style.marginTop = '10px';
-stats.dom.style.transform = 'scale(2)';
-stats.dom.style.transformOrigin = 'top left';
-document.getElementById('ui-panel').appendChild(stats.dom);
+// stats.dom.style.position = 'relative'; // <-- remove fixed position
+// stats.dom.style.top = 'auto';
+// stats.dom.style.left = 'auto';
+// stats.dom.style.marginTop = '10px';
+// stats.dom.style.transform = 'scale(2)';
+// stats.dom.style.transformOrigin = 'top left';
+// document.getElementById('ui-panel').appendChild(stats.dom);
+// document.getElementById('canvas-container').appendChild(stats.dom);
+export function dockStats(inUI){
+    if (inUI){
+        stats.dom.style.position = 'relative'; // <-- remove fixed position
+        stats.dom.style.top = 'auto';
+        stats.dom.style.left = 'auto';
+        stats.dom.style.right = '0px';
+        stats.dom.style.marginTop = '10px';
+        stats.dom.style.transform = 'scale(2)';
+        stats.dom.style.transformOrigin = 'top left';
+        document.getElementById('ui-panel').appendChild(stats.dom);
+    } else {
+        stats.dom.style.position = 'absolute';
+        stats.dom.style.top = '100px';
+        stats.dom.style.left = 'auto';
+        stats.dom.style.right = '100px';
+        stats.dom.style.margin = '0';
+        stats.dom.style.transform = 'scale(2)';
+        stats.dom.style.transformOrigin = 'top right';
+        document.getElementById('main-container').appendChild(stats.dom);
+    }
+}
+
+
 
 // stats
 export const renderStats = {
@@ -40,6 +64,8 @@ export function updateTextStatsThrottled() {
         document.getElementById('fps').textContent = fps;
     }
     document.getElementById('drawCalls').textContent = renderStats.drawcalls;
+    document.getElementById('Colliders').textContent = Shared.physWorld.bodies.len();
+    document.getElementById('RigidBodies').textContent = Shared.physWorld.colliders.len();
 
     //update other stats requiring Shared.scene traversal every statsUpdateInterval
     if (now - lastStatsUpdate < statsUpdateInterval) return;

@@ -1,4 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+// import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
+import RAPIER from 'https://esm.sh/@dimforge/rapier3d-compat@0.12.0';
 import seedrandom from 'https://cdn.skypack.dev/seedrandom';
 import {loadResourcesFromJson} from './LoadResources.js';
 //OTHER IMPORTS FORBIDDEN! CIRCULAR DEPENDENCIES
@@ -142,6 +144,25 @@ export const scene    = new THREE.Scene();
 export const camera   = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
 export const renderer = new THREE.WebGLRenderer({ canvas:canvas, alpha: true });                                     // important
 
+//Rapier collider world
+export let physWorld = null;
+export let rapierDebug = null;
+export let mainRigidBody = null;
+// export let debugRender = null;
+// export let debugGeometry = null;
+// export let debugLines = null;
+// export const rigidBodies = [];
+export const colliderNameMap = new Map();
+
+export const gravity       = 9.81;
+export const maxFallSpeed = 50; // meters per second, adjust as needed
+// Define how steep is "walkable"
+export const maxSlopeCos = Math.cos(45 * Math.PI / 180); // walkable if < 45°
+
+export let physEventQueue = null;
+
+
+
 //ambient light
 export let ambientLight = new THREE.AmbientLight(AMBIENTLIGHTEDITCOLOR); // Soft light;
 
@@ -170,6 +191,9 @@ export const spritesInScene = {};
 //actionnable meshes in scene grouped by chunk
 export const actionnablesInScene = {};
 
+//colliders grouped by chunks
+export const colliderInScene = {};
+
 // camera holder: FPS-style rotation system
 export const pitchObject = new THREE.Object3D(); // Up/down rotation (X axis)
 export const yawObject = new THREE.Object3D();   // Left/right rotation (Y axis)
@@ -186,7 +210,7 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = false;
+    let online = true;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
@@ -221,6 +245,29 @@ export async function loadResources() {
     uvInfo.uvscalex = 1 / uvInfo.uvtilesPerRow; // 0.125
     uvInfo.uvscaley = 1 / uvInfo.uvtilesPerCol; // 0.125
         
+}
+
+/*-----------------------------------------------------*/
+// initRapier
+/*-----------------------------------------------------*/
+export async function initRapier(){
+    await RAPIER.init();
+    physWorld = new RAPIER.World({ x: 0, y: -gravity, z: 0 });
+    console.log('Rapier initialized', physWorld);
+
+    rapierDebug = addRapierDebug(scene,physWorld);
+
+// Create an event queue (for collision/contact events)
+    physEventQueue = new RAPIER.EventQueue(true); // "true" = auto drain    
+
+    mainRigidBody = physWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    mainRigidBody.userData = { name: "mainRigidBody"};
+
+    // debugRender = new RAPIER.DebugRenderPipeline();
+    // physWorld.debugRender = debugRender;    
+    // debugGeometry = new THREE.BufferGeometry();
+    // const debugMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+    // debugLines = new THREE.LineSegments(debugGeometry, debugMaterial);
 }
 
 /*---------------------------------------------------------*/
@@ -766,4 +813,118 @@ function rotatePivot(pivot, axis, targetAngle, duration = 1) {
   }
 
   requestAnimationFrame(animate);
+}
+
+
+
+export function addRapierDebugExp(){
+    rapierDebug = addRapierDebug(scene,physWorld);
+}
+
+
+
+// call after Rapier.init() and after you have a world
+function addRapierDebug(scene, world) {
+    // geometry & material for line segments
+    const debugGeo = new THREE.BufferGeometry();
+    // start empty; we'll allocate when we get data
+    //   const debugMat = new THREE.LineBasicMaterial({ vertexColors: true });
+
+    const debugMat = new THREE.LineBasicMaterial({
+        color: 0xffffff,      // white lines
+        linewidth: 2,         // ⚠️ only affects some renderers (not WebGL1)
+        vertexColors: false,  // ignore Rapier's internal colors
+    });
+
+
+    const debugLines = new THREE.LineSegments(debugGeo, debugMat);
+    debugLines.frustumCulled = false;
+    scene.add(debugLines);
+
+    // helper to update per-frame
+    function updateDebug() {
+        // IMPORTANT: call after world.step() so Rapier buffers are fresh
+        // world.debugRender() returns { vertices, indices? colors? } depending on build
+        const debug = world.debugRender(); // returns vertex buffer and color buffer
+        const vertices = debug.vertices || [];
+        const colors = debug.colors || [];
+
+        if (vertices.length === 0) {
+            debugGeo.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+            debugGeo.setAttribute('color', new THREE.Float32BufferAttribute([], 3));
+            return;
+        }
+
+        // If attribute sizes differ from previous, recreate attributes
+        if (!debugGeo.attributes.position || debugGeo.attributes.position.count !== vertices.length / 3) {
+            debugGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            // colors may be bytes (0..255) or floats (0..1). Try to detect:
+            let colorAttr;
+            if (colors.length === vertices.length) {
+                colorAttr = new THREE.Float32BufferAttribute(colors, 3);
+            } else if (colors.length === (vertices.length / 3) * 4) {
+                // rgba bytes -> convert to floats
+                const conv = new Float32Array((colors.length / 4) * 3);
+                for (let i = 0, j = 0; i < colors.length; i += 4, j += 3) {
+                    conv[j + 0] = colors[i + 0] / 255;
+                    conv[j + 1] = colors[i + 1] / 255;
+                    conv[j + 2] = colors[i + 2] / 255;
+                }
+                colorAttr = new THREE.Float32BufferAttribute(conv, 3);
+            } else {
+                // fallback: white
+                colorAttr = new THREE.Float32BufferAttribute(new Float32Array(vertices.length).fill(1), 3);
+            }
+            debugGeo.setAttribute('color', colorAttr);
+        } else {
+            // update existing attributes
+            debugGeo.attributes.position.array.set(vertices);
+            debugGeo.attributes.position.needsUpdate = true;
+
+            if (colors.length > 0) {
+                // attempt to map color buffer into float RGB attr
+                let attr = debugGeo.attributes.color;
+                if (colors.length === vertices.length) {
+                    attr.array.set(colors);
+                } else if (colors.length === (vertices.length / 3) * 4) {
+                    // rgba bytes -> rgb floats
+                    for (let i = 0, ai = 0; i < colors.length; i += 4, ai += 3) {
+                        attr.array[ai + 0] = colors[i + 0] / 255;
+                        attr.array[ai + 1] = colors[i + 1] / 255;
+                        attr.array[ai + 2] = colors[i + 2] / 255;
+                    }
+                }
+                attr.needsUpdate = true;
+            }
+        }
+
+        // recompute bounds so Three.js knows how to render
+        debugGeo.computeBoundingSphere();
+    }
+
+    // visibility helpers
+    function hide() {
+        debugLines.visible = false;
+    }
+
+    function show() {
+        debugLines.visible = true;
+    }
+
+    function toggle() {
+        debugLines.visible = !debugLines.visible;
+    }
+
+    return {
+        debugLines,
+        update: updateDebug,
+        hide,
+        show,
+        toggle,
+        dispose() {
+            scene.remove(debugLines);
+            debugGeo.dispose();
+            debugMat.dispose();
+        }
+    };
 }

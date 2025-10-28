@@ -13,7 +13,7 @@ import * as Game from './game/game.js';
 /*-----------------------------------------------------*/
 
 // revision hash
-const revision = "0.67"; // Replace with actual Git hash
+const revision = "0.68"; // Replace with actual Git hash
 
 // Add it to the div
 document.getElementById('revision-info').innerText = `Version: ${revision}`;
@@ -54,9 +54,10 @@ main
  │    └── gameHUD──┘
  ├── editorUI
  │    ├──> editor
+ │    ├──> stats ─────> shared
  │    ├──> shared
  │    └──> gameHUD
- ├── menuUI ─────────> shared
+ ├── menuUI ──────────> shared
  │ 
  └── shared ─────────> LoadResources
 
@@ -95,6 +96,9 @@ main
 
 async function setupAndStart() {
     try {
+
+        //init Rapier
+        await Shared.initRapier();
 
         //load assets
         await Shared.loadResources();

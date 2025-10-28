@@ -1,8 +1,16 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+// import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
+import RAPIER from 'https://esm.sh/@dimforge/rapier3d-compat@0.12.0';
 import * as Shared from '../shared.js';
 import * as Stats from '../Stats.js';
 import * as GameHUD from '../game/gameHUD.js';
-import {mergeBufferGeometries} from '../utils/BufferGeometryUtils.js';
+// import {mergeBufferGeometries} from '../utils/BufferGeometryUtils.js';
+import {mergeGeometries} from '../utils/BufferGeometryUtils.js';
+
+
+// import RAPIER from 'https://cdn.skypack.dev/@dimforge/rapier3d-compat';
+
+
 
 /*-----------------------------------------------------*/
 // EDITOR CONSTANTS
@@ -162,6 +170,7 @@ export let ActionToKeyMap = {
     showXY      : { key: 'Digit3', OnPress: true },
     showW       : { key: 'Digit4', OnPress: true },
     showA       : { key: 'Digit5', OnPress: true },
+    hideCol     : { key: 'KeyH', OnPress: true },
 };
 
 /*-----------------------------------------------------*/
@@ -425,7 +434,52 @@ export function startEditorLoop() {
     document.addEventListener("wheel", onMouseWheel, { passive: false });
 
 
+    //test RAPIER
+    // rapierinit();
+    // Shared.rapierDebug = Shared.addRapierDebug(Shared.scene,Shared.physWorld);
+
+
+
+
+
+
+    // Shared.addRapierDebugExp();
+
 }   
+
+// let world;
+// let rigidBodies = [];
+// async function rapierinit() {
+//     await RAPIER.init();
+//     world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+
+    // let cubeMesh;
+    // // Rapier ground
+    // const groundRigidBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+    // const groundCollider = RAPIER.ColliderDesc.cuboid(10, 0, 10);
+    // world.createCollider(groundCollider, groundRigidBody);
+
+    // // Cube
+    // const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
+    // const cubeMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    // cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
+    // cubeMesh.position.y = 2;
+    // cubeMesh.name="rapiertest";
+    // Shared.scene.add(cubeMesh);
+
+    // // Rapier cube
+    // const cubeBody = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 5, 0));
+    // const cubeCollider = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5)
+    // .setRestitution(2)   // make it bouncy
+    // .setFriction(0.5);      // optional: adjust friction
+
+    // world.createCollider(cubeCollider, cubeBody);
+
+    // rigidBodies.push({ mesh: cubeMesh, body: cubeBody });
+
+//     console.log('Rapier initialized', world);
+// }
+
 
 /*---------------------------------*/
 // stopEditorLoop
@@ -459,6 +513,9 @@ export function stopEditorLoop() {
     document.removeEventListener("mouseup", onMouseUp, false);
     document.removeEventListener("wheel", onMouseWheel, { passive: false });
 
+    Stats.stats.end();
+
+    // Shared.rapierDebug.dispose();
 
 }
 
@@ -623,9 +680,12 @@ export function setMeshFromMeshindex(meshindex){
 
 export function setMeshFromMeshName(meshname){
     const meshindex = Shared.atlasMeshidx[meshname];
+
+    if (!meshindex === undefined) {
+        throw new Error("meshname", meshname, "is not defined");
+    }
+
     currentMeshIndex = meshindex;
-
-
 
     //If there is a material which matches the mesh name
     //set it immediately there
@@ -1130,6 +1190,7 @@ function executePausableActions(delta) {
         if (Actions.showXY) setWallMode(MODEXY);
         if (Actions.showW) setWallMode(MODEW);
         if (Actions.showA) setWallMode(MODEA);
+        if (Actions.hideCol) toggleHideCollider();
     }
 
 }
@@ -1201,6 +1262,8 @@ function editorLoop(now) {
     }
 
         //RENDER GIZMO HELPER in BOTTOM LEFT CORNER
+        //TODO: main renderer is in there too
+        //move before the end of loop?
         render_gizmo();
 
         //rebuild dirty chunks
@@ -1223,6 +1286,41 @@ function editorLoop(now) {
         if (0) Stats.simulateBlockingWait(200); // 200ms delay
         Stats.updateTextStatsThrottled();
         Stats.stats.end();
+
+
+
+        // Step Rapier physics
+        if (Shared.physWorld){
+
+            Shared.physWorld.step();
+            // Shared.rapierDebug.dispose();
+            Shared.rapierDebug.update();
+
+            // // Update Rapier's debug data
+            // Shared.physWorld.debugRender.clear();
+            // Shared.physWorld.debugRender.render(Shared.physWorld);
+            // // Get debug vertices
+            // const vertices = Shared.debugRender.vertices;
+            // Shared.debugGeometry.setAttribute(
+            // "position",
+            // new THREE.Float32BufferAttribute(vertices, 3)
+            // );
+            // Shared.debugGeometry.computeBoundingSphere();
+            // Shared.debugGeometry.attributes.position.needsUpdate = true;
+
+        //     console.log("step");
+        //     // world.step();
+
+        //     // Update Three.js meshes from physics
+        //     for (const obj of rigidBodies) {
+        //         const pos = obj.body.translation();
+        //         const rot = obj.body.rotation();
+        //         obj.mesh.position.set(pos.x, pos.y, pos.z);
+        //         obj.mesh.quaternion.set(rot.x, rot.y, rot.z, rot.w);
+        //     }
+        }
+
+
 
     }
 
@@ -1321,6 +1419,10 @@ function highlightMeshToDelete(){
                 break;
             }
             case "sprite":
+                selectInfo = closestHit.object?.userData?.info;
+                if (!selectInfo) throw new Error(`Sprite userData.info missing.`);
+                break;
+            case "actionnable":
                 selectInfo = closestHit.object?.userData?.info;
                 if (!selectInfo) throw new Error(`Sprite userData.info missing.`);
                 break;
@@ -1602,6 +1704,10 @@ function createScene() {
     Shared.scene.add(lightHelperGroup);
 
     Shared.scene.add(Shared.ambientLight);
+
+
+
+    // Shared.scene.add(Shared.debugLines);
 
 }
 
@@ -2301,7 +2407,7 @@ function generateUV(uv,uvid){
 
 function generateGeometry(rotid,uvid,meshid) {
     // Clone the parent object (deep clone)
-    const parent = Shared.atlasMeshArray[meshid][1].clone(true);
+    const parent = Shared.atlasMeshArray[meshid][1].MESH.clone(true);
 
     // Traverse all children in the hierarchy and scale/offset their UV to the desired atlas location
     parent.traverse((child) => {
@@ -2624,7 +2730,61 @@ function rebuildDirtyChunks() {
 
                         tileGeometries.push(newgeom);
                     }
+
+
+                    // 1️⃣ Retrieve collider template
+                    const def = Shared.atlasMesh[meshname].COLLIDER;
+                    // def = { halfExtents: Vector3, localOffset: Vector3, localRotation: Quaternion? }
+
+                    if (!def) {
+                        console.log("warning: ", meshname, "has no collider defined.");
+                    } else {
+
+
+                        // 2️⃣ Use existing chunk/world transform
+                        const worldPos = chunkpos;      // THREE.Vector3
+                        const worldQuat = new THREE.Quaternion();
+                        rot.decompose(new THREE.Vector3(), worldQuat, new THREE.Vector3());
+
+                        // 3️⃣ Compute the collider world position by applying the local offset
+                        const offsetWorld = def.localOffset.clone().applyQuaternion(worldQuat);
+                        const colliderWorldPos = worldPos.clone().add(offsetWorld);
+
+                        // 4️⃣ Combine rotations if the collider has a local rotation (optional)
+                        let colliderWorldQuat = worldQuat.clone();
+                        if (def.localRotation) {
+                            colliderWorldQuat.multiply(def.localRotation);
+                        }
+
+                        // 5️⃣ Create the Rapier collider
+                        const colliderDesc = RAPIER.ColliderDesc.cuboid(
+                            def.halfExtents.x,
+                            def.halfExtents.y,
+                            def.halfExtents.z
+                        )
+                            .setTranslation(colliderWorldPos.x, colliderWorldPos.y, colliderWorldPos.z)
+                            .setRotation(colliderWorldQuat);
+
+                        // 6️⃣ Create a fixed rigid body and attach collider
+                        // const body = Shared.physWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+                        const collider = Shared.physWorld.createCollider(colliderDesc, Shared.mainRigidBody);
+
+                        // body.userData = { name: "ChunkBody"+tilexyz};
+                        collider.userData = { name: "Collider"+tilexyz};
+
+                        Shared.colliderNameMap.set(collider, meshname+"("+tilexyz+")");
+                        if (!Shared.colliderInScene[chunkKey]) Shared.colliderInScene[chunkKey] = [];
+                        Shared.colliderInScene[chunkKey].push(collider);
+
+                    }
+                
                 }
+
+
+
+
+
+
 
                 // cleanup: remove empty tiles
                 if (Object.keys(tilemeshes).length === 0) {
@@ -2635,7 +2795,8 @@ function rebuildDirtyChunks() {
         }
 
         if (tileGeometries.length > 0) {
-            const bakedGeometry = mergeBufferGeometries(tileGeometries, false);
+            // const bakedGeometry = mergeBufferGeometries(tileGeometries, false);
+            const bakedGeometry = mergeGeometries(tileGeometries, false);
             for (const geom of tileGeometries) geom.dispose();//we dont need these anymore after chunking
 
             bakedGeometry.name = "ChunkGeometry_"+chunkKey;
@@ -2683,7 +2844,24 @@ function deleteChunkInScene(chunkKey){
         }
         //do not call geometry.dispose here as the actionnableMeshes share them
         delete Shared.actionnablesInScene[chunkKey];
-    }   
+    }
+    if (chunkKey in Shared.colliderInScene) {
+        for (const collider of Shared.colliderInScene[chunkKey]) {
+            // const bodyHandle = collider.parent();
+            // if (bodyHandle) {
+            //     const body = Shared.physWorld.getRigidBody(bodyHandle);
+            //     if (body) {
+            //         Shared.physWorld.removeRigidBody(body); // removes collider(s) too
+            //     }
+            // } else {
+            //     // fallback if collider has no body
+            //     Shared.physWorld.removeCollider(collider, true);
+            // }
+            Shared.physWorld.removeCollider(collider, true);
+            Shared.colliderNameMap.delete(collider);
+        }
+        delete Shared.colliderInScene[chunkKey];
+    }
 }
 
 function deleteAllchunksInScene(){
@@ -3092,7 +3270,7 @@ function generateAnimatedTextures(uvname,meshid){
     // now convert keys -> uvids
     const uvframes = frames.map(fkey => {
         const frameuvid = Shared.atlasUVsidx[fkey]; // lookup index by key
-        let newuv = Shared.atlasMeshArray[meshid][1]?.geometry.attributes.uv.clone();
+        let newuv = Shared.atlasMeshArray[meshid][1]?.MESH.geometry.attributes.uv.clone();
         return generateUV(newuv,frameuvid);
     });
 
@@ -3112,4 +3290,9 @@ function clearAnimatedTextures() {
     //     }
     // }
     Shared.UVToUpdate.length = 0; // clear in place
+}
+
+
+function toggleHideCollider(){
+    Shared.rapierDebug.toggle();
 }
