@@ -418,6 +418,8 @@ function gameLoop(now) {
         if (Shared.physWorld){
             // Shared.physWorld.step(Shared.physEventQueue);
             // Shared.physWorld.step();
+            updateDoorsPhysics();
+
             myworldstep();
 
             syncCameraToPlayer();                   // camera follows capsule
@@ -931,7 +933,7 @@ function collisionCheck(newPos, currentPos, currentRot) {
         // console.log(newPos.z);
 
     } else {
-        console.log("NOHIT");
+        // console.log("NOHIT");
     }
 
     return newPos;
@@ -940,4 +942,21 @@ function collisionCheck(newPos, currentPos, currentRot) {
 
 function toggleHideCollider(){
     Shared.rapierDebug.toggle();
+}
+
+
+
+function updateDoorsPhysics() {
+  for (const update of Shared.pendingBodyUpdates) {
+
+    // const position =  update.body.translation(); // returns a Rapier.Vector (x, y, z)
+    // const rotation =  update.body.rotation();   // returns a Rapier.Quaternion (x, y, z, w)
+    // console.log("Body position:", position.x, position.y, position.z);
+    // console.log("Body rotation:", rotation.x, rotation.y, rotation.z, rotation.w);
+
+    update.body.setNextKinematicTranslation(update.pivotPos);
+    update.body.setNextKinematicRotation(update.pivotQuat);
+
+    }
+  Shared.pendingBodyUpdates.length = 0; // clear for next frame
 }

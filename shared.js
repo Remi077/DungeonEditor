@@ -148,11 +148,14 @@ export const renderer = new THREE.WebGLRenderer({ canvas:canvas, alpha: true });
 export let physWorld = null;
 export let rapierDebug = null;
 export let mainRigidBody = null;
+export let mainKinematicBody = null;
 // export let debugRender = null;
 // export let debugGeometry = null;
 // export let debugLines = null;
 // export const rigidBodies = [];
 export const colliderNameMap = new Map();
+export const pendingBodyUpdates = [];
+
 
 export const gravity       = 9.81;
 export const maxFallSpeed = 50; // meters per second, adjust as needed
@@ -262,6 +265,9 @@ export async function initRapier(){
 
     mainRigidBody = physWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
     mainRigidBody.userData = { name: "mainRigidBody"};
+
+    mainKinematicBody = physWorld.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
+    mainKinematicBody.userData = { name: "mainKinematicBody"};
 
     // debugRender = new RAPIER.DebugRenderPipeline();
     // physWorld.debugRender = debugRender;    
@@ -757,8 +763,14 @@ export function openDoor(self, playerState) {
 
 
     const doorPivot = self.children[0];
-    // rotatePivot(doorPivot, new THREE.Vector3(0, 1, 0),dir * ninetyDeg, 0.6);
-    rotatePivot(doorPivot, new THREE.Vector3(0, 0, 1),dir * ninetyDeg, 0.6); //local rotation axis
+    const doorBody = self.userData?.body;
+
+    const pivotToCenterOffset = doorPivot.position.clone().negate(); // invert the pivot position
+    const centerToColliderOffset = atlasMesh["DOOR"].COLLIDER.collideroffset;
+
+    const pivotOffset = pivotToCenterOffset.clone().add(centerToColliderOffset);
+
+    rotatePivot(doorPivot, new THREE.Vector3(0, 0, 1),dir * ninetyDeg, 0.6, doorBody, pivotOffset); //local rotation axis
 
 }
 
@@ -790,29 +802,45 @@ export function openChest(self, playerState) {
 
 
 
-function rotatePivot(pivot, axis, targetAngle, duration = 1) {
-  const startTime = performance.now();
-  let accumulatedAngle = 0;
+function rotatePivot(pivot, axis, targetAngle, duration = 1, body = null, pivotOffset = null) {
+    const startTime = performance.now();
+    let accumulatedAngle = 0;
 
-  function animate(time) {
-    const elapsed = (time - startTime) / 1000; // seconds
-    const t = Math.min(elapsed / duration, 1); // normalized [0,1]
-    const angleToApply = (targetAngle * t) - accumulatedAngle;
+    function animate(time) {
+        const elapsed = (time - startTime) / 1000; // seconds
+        const t = Math.min(elapsed / duration, 1); // normalized [0,1]
+        const angleToApply = (targetAngle * t) - accumulatedAngle;
 
-    // Rotate the door by the small delta around the pivot
-    // rotateAroundPoint(door, pivot, axis, angleToApply);
-    // pivot.rotateOnWorldAxis(axis, angleToApply);
-    // pivot.rotation.z += angleToApply;
-    pivot.rotateOnAxis(axis,angleToApply);
+        // Rotate the door by the small delta around the pivot
+        pivot.rotateOnAxis(axis, angleToApply);
 
-    accumulatedAngle += angleToApply;
+        accumulatedAngle += angleToApply;
 
-    if (t < 1) {
-      requestAnimationFrame(animate);
+        if (body) {
+            //schedule the body physics change
+            //this is executed in main loop before world.step
+            //if this is done here we can have race conditions with 
+            //world.step in the main loop
+            const pivotPos = pivot.getWorldPosition(new THREE.Vector3());
+            const pivotQuat = pivot.getWorldQuaternion(new THREE.Quaternion());
+            // printQuat(pivot);
+            const worldOffset = pivotOffset.clone().applyQuaternion(pivotQuat);
+
+            const finalPos = pivotPos.clone().add(worldOffset);
+            pendingBodyUpdates.push({
+                body,
+                pivotPos: finalPos,
+                pivotQuat
+            });
+        }
+
+
+        if (t < 1) {
+            requestAnimationFrame(animate);
+        }
     }
-  }
 
-  requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 }
 
 
@@ -844,26 +872,32 @@ function addRapierDebug(scene, world) {
     // helper to update per-frame
     function updateDebug() {
         // IMPORTANT: call after world.step() so Rapier buffers are fresh
-        // world.debugRender() returns { vertices, indices? colors? } depending on build
         const debug = world.debugRender(); // returns vertex buffer and color buffer
         const vertices = debug.vertices || [];
         const colors = debug.colors || [];
 
-        if (vertices.length === 0) {
+        // early exit if no vertices
+        if (!vertices.length) {
             debugGeo.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
             debugGeo.setAttribute('color', new THREE.Float32BufferAttribute([], 3));
             return;
         }
 
-        // If attribute sizes differ from previous, recreate attributes
+        // Ensure vertices contain valid numbers
+        const validVertices = vertices.every(v => Number.isFinite(v));
+        if (!validVertices) {
+            console.warn("Debug vertices contain invalid values; skipping update.");
+            return;
+        }
+
+        // Recreate attributes if size differs
         if (!debugGeo.attributes.position || debugGeo.attributes.position.count !== vertices.length / 3) {
             debugGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-            // colors may be bytes (0..255) or floats (0..1). Try to detect:
+
             let colorAttr;
             if (colors.length === vertices.length) {
                 colorAttr = new THREE.Float32BufferAttribute(colors, 3);
             } else if (colors.length === (vertices.length / 3) * 4) {
-                // rgba bytes -> convert to floats
                 const conv = new Float32Array((colors.length / 4) * 3);
                 for (let i = 0, j = 0; i < colors.length; i += 4, j += 3) {
                     conv[j + 0] = colors[i + 0] / 255;
@@ -872,7 +906,7 @@ function addRapierDebug(scene, world) {
                 }
                 colorAttr = new THREE.Float32BufferAttribute(conv, 3);
             } else {
-                // fallback: white
+                // fallback to white
                 colorAttr = new THREE.Float32BufferAttribute(new Float32Array(vertices.length).fill(1), 3);
             }
             debugGeo.setAttribute('color', colorAttr);
@@ -882,12 +916,10 @@ function addRapierDebug(scene, world) {
             debugGeo.attributes.position.needsUpdate = true;
 
             if (colors.length > 0) {
-                // attempt to map color buffer into float RGB attr
-                let attr = debugGeo.attributes.color;
+                const attr = debugGeo.attributes.color;
                 if (colors.length === vertices.length) {
                     attr.array.set(colors);
                 } else if (colors.length === (vertices.length / 3) * 4) {
-                    // rgba bytes -> rgb floats
                     for (let i = 0, ai = 0; i < colors.length; i += 4, ai += 3) {
                         attr.array[ai + 0] = colors[i + 0] / 255;
                         attr.array[ai + 1] = colors[i + 1] / 255;
@@ -898,8 +930,10 @@ function addRapierDebug(scene, world) {
             }
         }
 
-        // recompute bounds so Three.js knows how to render
-        debugGeo.computeBoundingSphere();
+        // Only compute bounding sphere if positions are valid
+        if (debugGeo.attributes.position && debugGeo.attributes.position.count > 0) {
+            debugGeo.computeBoundingSphere();
+        }
     }
 
     // visibility helpers
@@ -928,3 +962,19 @@ function addRapierDebug(scene, world) {
         }
     };
 }
+
+
+function printQuat(pivot){
+const quat = pivot.getWorldQuaternion(new THREE.Quaternion());
+
+// Convert to Euler (THREE uses radians by default)
+const euler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
+
+// Convert to degrees
+const deg = {
+  x: THREE.MathUtils.radToDeg(euler.x),
+  y: THREE.MathUtils.radToDeg(euler.y),
+  z: THREE.MathUtils.radToDeg(euler.z)
+};
+
+console.log('World rotation:', deg);}

@@ -293,15 +293,21 @@ function loadMeshAtlas(loader, src) {
                         // // Optionally: hide collider mesh in Three.js
                         // // child.visible = false;
 
+                        //offset between mesh center and collider center
+                        // Compute collider center offset (world-space)
+                        const colliderCenterOffsetWorld = new THREE.Vector3().subVectors(center, position);
+
+                        // Convert that offset into the object's local space (if you want a local offset)
+                        const colliderCenterOffsetLocal = colliderCenterOffsetWorld.clone().applyQuaternion(quaternion.clone().invert());
+
                         // colliders[baseName] = colliderDesc;
                         // When building the atlas
                         colliders[baseName] = {
                         halfExtents: halfExtents,
                         localOffset: center.clone(),
-                        localRotation: quaternion.clone()
+                        localRotation: quaternion.clone(),
+                        collideroffset: colliderCenterOffsetLocal
                         };
-
-
                     }
                 });
 

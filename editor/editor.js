@@ -2659,6 +2659,97 @@ function rebuildDirtyChunks() {
                     );
 
 
+                    /*----------*/
+                    /*----------*/
+                    // COLLIDER //
+                    /*----------*/
+                    /*----------*/
+
+                    // 1️⃣ Retrieve collider template
+                    const def = Shared.atlasMesh[meshname].COLLIDER;
+                    // def = { halfExtents: Vector3, localOffset: Vector3, localRotation: Quaternion? }
+
+                    let colliderhandle = null;
+                    let colliderDescHandle = null;
+                    let bodyhandle = null;
+                    if (!def) {
+                        console.log("warning: ", meshname, "has no collider defined.");
+                    } else {
+
+
+                        // 2️⃣ Use existing chunk/world transform
+                        const worldPos = chunkpos;      // THREE.Vector3
+                        const worldQuat = new THREE.Quaternion();
+                        rot.decompose(new THREE.Vector3(), worldQuat, new THREE.Vector3());
+
+                        // 3️⃣ Compute the collider world position by applying the local offset
+                        const offsetWorld = def.localOffset.clone().applyQuaternion(worldQuat);
+                        const colliderWorldPos = worldPos.clone().add(offsetWorld);
+
+                        // 4️⃣ Combine rotations if the collider has a local rotation (optional)
+                        let colliderWorldQuat = worldQuat.clone();
+                        if (def.localRotation) {
+                            colliderWorldQuat.multiply(def.localRotation);
+                        }
+
+                        // 5️⃣ Create the Rapier collider
+
+
+                        // 6️⃣ Create a fixed rigid body and attach collider
+                        // const body = Shared.physWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+                        if (meshname.startsWith("DOOR")){
+                            //one rigid kinematic body per collider placed at door position/rotation
+                            //one collider spawning at 0,0,0 for this body
+                            //this is because we can only update one collider per kinematic body
+                            //and it is easier to update the body transform than the collider directly in this scenario
+                            // const rapierQuat = new RAPIER.Quaternion(
+                            //     colliderWorldQuat.x,
+                            //     colliderWorldQuat.y,
+                            //     colliderWorldQuat.z,
+                            //     colliderWorldQuat.w
+                            // );
+                            const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
+                                .setTranslation(colliderWorldPos.x, colliderWorldPos.y, colliderWorldPos.z)
+                                .setRotation(colliderWorldQuat); // must be a RAPIER.Quaternion
+                                // .setRotation(rapierQuat); // must be a RAPIER.Quaternion
+                            bodyhandle = Shared.physWorld.createRigidBody(bodyDesc);
+                            bodyhandle.userData = { name: "Body_"+meshname+"_"+tilexyz};
+                            colliderDescHandle = RAPIER.ColliderDesc.cuboid(
+                                def.halfExtents.x,
+                                def.halfExtents.y,
+                                def.halfExtents.z
+                            )
+                                .setTranslation(0,0,0)
+                                .setRotation(new RAPIER.Quaternion(0, 0, 0, 1));
+                        } else {
+                            //one main shared rigid body placed at 0,0,0
+                            //and the colliders placed/rotated relatively to it
+                            //all spawning from shared body
+                            colliderDescHandle = RAPIER.ColliderDesc.cuboid(
+                                def.halfExtents.x,
+                                def.halfExtents.y,
+                                def.halfExtents.z
+                            )
+                                .setTranslation(colliderWorldPos.x, colliderWorldPos.y, colliderWorldPos.z)
+                                .setRotation(colliderWorldQuat);
+                            bodyhandle = Shared.mainRigidBody;
+                        }
+                        colliderhandle = Shared.physWorld.createCollider(colliderDescHandle, bodyhandle);
+                        colliderhandle.userData = { name: "Collider_"+meshname+"_"+tilexyz};
+
+                        Shared.colliderNameMap.set(colliderhandle, meshname+"("+tilexyz+")");
+                        if (!Shared.colliderInScene[chunkKey]) Shared.colliderInScene[chunkKey] = [];
+                        Shared.colliderInScene[chunkKey].push(colliderhandle);
+
+                    }
+
+
+                    /*------*/
+                    /*------*/
+                    // MESH //
+                    /*------*/
+                    /*------*/
+
                     if (meshname.startsWith("SPRITE")){
                         // const spriteMesh = new THREE.Mesh(sharedgeom, Shared.atlasMatTransp);
                         const spriteMesh = sharedgeom.clone(true);
@@ -2689,13 +2780,13 @@ function rebuildDirtyChunks() {
                         //add function pointer in userdata
                         // actionnableMesh.userData = {type:"actionnable",info,action:Shared.doSomething};
                         if (meshname.startsWith("DOOR")){
-                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.openDoor};});
+                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.openDoor,collider:colliderhandle,body:bodyhandle};});
                             // actionnableMesh.userData = {type:"actionnable",info,action:Shared.openDoor};
                         }else if (meshname.startsWith("ITEM")){
-                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.takeItem};});
+                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.takeItem,collider:colliderhandle,body:bodyhandle};});
                             // actionnableMesh.userData = {type:"actionnable",info,action:Shared.takeItem};
                         }else if (meshname.startsWith("CHEST")){
-                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.openChest};});
+                            actionnableMesh.traverse((child) => {child.userData = {type:"actionnable",info,action:Shared.openChest,collider:colliderhandle,body:bodyhandle};});
                             // actionnableMesh.userData = {type:"actionnable",info,action:Shared.takeItem};
                         }
                         actionnableMesh.name = meshname;
@@ -2735,51 +2826,7 @@ function rebuildDirtyChunks() {
                     }
 
 
-                    // 1️⃣ Retrieve collider template
-                    const def = Shared.atlasMesh[meshname].COLLIDER;
-                    // def = { halfExtents: Vector3, localOffset: Vector3, localRotation: Quaternion? }
 
-                    if (!def) {
-                        console.log("warning: ", meshname, "has no collider defined.");
-                    } else {
-
-
-                        // 2️⃣ Use existing chunk/world transform
-                        const worldPos = chunkpos;      // THREE.Vector3
-                        const worldQuat = new THREE.Quaternion();
-                        rot.decompose(new THREE.Vector3(), worldQuat, new THREE.Vector3());
-
-                        // 3️⃣ Compute the collider world position by applying the local offset
-                        const offsetWorld = def.localOffset.clone().applyQuaternion(worldQuat);
-                        const colliderWorldPos = worldPos.clone().add(offsetWorld);
-
-                        // 4️⃣ Combine rotations if the collider has a local rotation (optional)
-                        let colliderWorldQuat = worldQuat.clone();
-                        if (def.localRotation) {
-                            colliderWorldQuat.multiply(def.localRotation);
-                        }
-
-                        // 5️⃣ Create the Rapier collider
-                        const colliderDesc = RAPIER.ColliderDesc.cuboid(
-                            def.halfExtents.x,
-                            def.halfExtents.y,
-                            def.halfExtents.z
-                        )
-                            .setTranslation(colliderWorldPos.x, colliderWorldPos.y, colliderWorldPos.z)
-                            .setRotation(colliderWorldQuat);
-
-                        // 6️⃣ Create a fixed rigid body and attach collider
-                        // const body = Shared.physWorld.createRigidBody(RAPIER.RigidBodyDesc.fixed());
-                        const collider = Shared.physWorld.createCollider(colliderDesc, Shared.mainRigidBody);
-
-                        // body.userData = { name: "ChunkBody"+tilexyz};
-                        collider.userData = { name: "Collider"+tilexyz};
-
-                        Shared.colliderNameMap.set(collider, meshname+"("+tilexyz+")");
-                        if (!Shared.colliderInScene[chunkKey]) Shared.colliderInScene[chunkKey] = [];
-                        Shared.colliderInScene[chunkKey].push(collider);
-
-                    }
                 
                 }
 
