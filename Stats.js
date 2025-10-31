@@ -64,8 +64,8 @@ export function updateTextStatsThrottled() {
         document.getElementById('fps').textContent = fps;
     }
     document.getElementById('drawCalls').textContent = renderStats.drawcalls;
-    document.getElementById('Colliders').textContent = Shared.physWorld.bodies.len();
-    document.getElementById('RigidBodies').textContent = Shared.physWorld.colliders.len();
+    document.getElementById('Colliders').textContent = Shared.physWorld.colliders.len();
+    document.getElementById('RigidBodies').textContent = Shared.physWorld.bodies.len();
 
     //update other stats requiring Shared.scene traversal every statsUpdateInterval
     if (now - lastStatsUpdate < statsUpdateInterval) return;
