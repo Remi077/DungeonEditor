@@ -161,6 +161,7 @@ export let ActionToKeyMap = {
     saveLevel   : { key: 'Ctrl+KeyS', OnPress: true },
     loadLevel   : { key: 'Ctrl+KeyL', OnPress: true },
     resetLevel  : { key: 'Ctrl+KeyR', OnPress: true },
+    loadTest    : { key: 'KeyM', OnPress: true },
     startGame   : { key: 'KeyG', OnPress: true },
     nextMode    : { key: 'PageUp', OnPress: true },
     prevMode    : { key: 'PageDown', OnPress: true },
@@ -436,7 +437,7 @@ export function startEditorLoop() {
 
     //test RAPIER
     // rapierinit();
-    // Shared.rapierDebug = Shared.addRapierDebug(Shared.scene,Shared.physWorld);
+    // Shared.rapierDebug = Shared.addRapierDebug(Shared.physWorld);
 
 
 
@@ -1182,6 +1183,7 @@ function executePausableActions(delta) {
         if (Actions.prevMesh) prevMesh();
         if (Actions.saveLevel) saveLevel();
         if (Actions.loadLevel) loadLevel();
+        if (Actions.loadTest) loadTest();
         if (Actions.resetLevel) resetLevel();
         // if (Actions.startGame) toggleGameMode();
         if (Actions.undo) undo();
@@ -1866,6 +1868,22 @@ export async function loadLevel() {
     //so this function and the parent function needs to be asynchronous
     //so stuff can happen in parallel instead of blocking the main thread
     await loadPlanesIntoScene(json);
+}
+
+
+export async function loadTest() {
+    try {
+        // Fetch the static file
+        const response = await fetch('./assets/test.json');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+
+        // Keep your progress-aware loading step
+        await loadPlanesIntoScene(json);
+    } catch (err) {
+        console.error('Failed to load test.json:', err);
+    }
+    toggleGameMode();
 }
 
 /*---------------------------------*/
@@ -2735,9 +2753,13 @@ function rebuildDirtyChunks() {
                             bodyhandle = Shared.mainRigidBody;
                         }
                         colliderhandle = Shared.physWorld.createCollider(colliderDescHandle, bodyhandle);
-                        colliderhandle.userData = { name: "Collider_"+meshname+"_"+tilexyz};
+                        let customname = meshname;
+                        if (meshname == "PLANE"){
+                        if (direction === "XZ") customname = "FLOOR";
+                        else customname = "WALL";}
+                        colliderhandle.userData = { name: "Collider_"+customname+"_"+tilexyz};
 
-                        Shared.colliderNameMap.set(colliderhandle, meshname+"("+tilexyz+")");
+                        Shared.colliderNameMap.set(colliderhandle, customname+"("+tilexyz+")");
                         if (!Shared.colliderInScene[chunkKey]) Shared.colliderInScene[chunkKey] = [];
                         Shared.colliderInScene[chunkKey].push(colliderhandle);
 
@@ -3344,5 +3366,7 @@ function clearAnimatedTextures() {
 
 
 function toggleHideCollider(){
-    Shared.rapierDebug.toggle();
+    // Shared.rapierDebug.toggle();
+    // Shared.highlightCollidingMeshes.forEach(m => m.visible = false);
+    Shared.colliderDebugGroup.visible = !Shared.colliderDebugGroup.visible;
 }
