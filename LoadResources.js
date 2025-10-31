@@ -267,7 +267,7 @@ function loadMeshAtlas(loader, src) {
 
                         // Apply local transform to get world size
                         const bbox = child.geometry.boundingBox.clone();
-                        bbox.applyMatrix4(child.matrixWorld);
+                        // bbox.applyMatrix4(child.matrixWorld); //dont apply the world matrix otherwise the bb calculation will take blender global rotation in account
 
                         const size = new THREE.Vector3();
                         bbox.getSize(size);
