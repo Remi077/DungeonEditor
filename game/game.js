@@ -145,6 +145,7 @@ export function stopGameLoop() {
 let lastUVUpdate = 0;
 let firstFrame = true;
 let isTouchingGround = false;
+let isTouchingCeiling = false;
 const verbose = false;
 // let skipOneFrame = false;
 const uvUpdateInterval = 0.07; // seconds between updates
@@ -206,34 +207,42 @@ function gameLoop(now) {
 
         if (!firstFrame) {
 
-            /*------------------*/
-            /* GROUND DETECTION */
-            /*------------------*/
+            /*----------------------------*/
+            /* GROUND + CEILING DETECTION */
+            /*----------------------------*/
             
-            // check ground, update vertical speed and snap to floor if close  
-            let result = groundCheck();
+            // check ground and ceiling update vertical speed and snap to floor if close  
+            let checkResult = groundCeilingCheck();
             let moveCam    = Shared.moveSpeed;
-            isTouchingGround = result.hit;
+            const contactThreshold = 0.05; //when capsule is closer than this distance to ground or ceiling we consider it a collision 
+            const skin = 0.02; //after a collision we snap the capsule bottom/up to the ground/ceiling and we nudge outward by skin distance to avoid penetration
+            isTouchingGround = checkResult.groundHit && checkResult.groundDistance < contactThreshold;
+            isTouchingCeiling = checkResult.ceilingHit && checkResult.ceilingDistance < contactThreshold;
 
-            if (!isTouchingGround){
+            if (!isTouchingGround && !isTouchingCeiling) {
+                if (verbose) console.log("FALLING");
                 moveCam *= 0.5; //slower lateral moves when in Air
                 verticalSpeed -= Shared.gravity * deltaTime;
                 // Clamp to max fall speed
                 if (verticalSpeed < -Shared.maxFallSpeed) verticalSpeed = -Shared.maxFallSpeed;
-            } else if (result.distance < 0.05) {
-                if (jumpPressed){
+            } else if (isTouchingGround) {
+                if (verbose) console.log("GROUNDHIT");
+                if (jumpPressed) {
                     verticalSpeed = jumpSpeed;
                     jumpPressed = false;
                 } else {
                     verticalSpeed = 0; //cancel speed
-                    if (verbose) 
-                        console.log("STICKING from ", newPos.y ,"to ",newPos.y - result.distance, " (distance:",result.distance,")" );
-                    newPos.y -= result.distance; //snap to floor with small skin distance
-                    newPos.y += 0.02; //small skin distance
-                    // console.log("STICKING at ",newPos.y, " ",result.distance );
+                    if (verbose) console.log("FLOOR STICKING from ", newPos.y, "to ", newPos.y - checkResult.groundDistance, " (distance:", checkResult.groundDistance, ")");
+                    newPos.y -= checkResult.groundDistance; //snap to floor
+                    newPos.y += skin; //small skin distance
                 }
+            } else if (isTouchingCeiling) {
+                verticalSpeed = 0; //cancel speed
+                //snap to ceiling and nudge downwards by skin distance
+                if (verbose) console.log("CEILING STICKING from ", newPos.y, "to ", newPos.y - checkResult.ceilingDistance, " (distance:", checkResult.ceilingDistance, ")");
+                newPos.y -= checkResult.ceilingDistance; //snap to ceiling
+                newPos.y -= skin; //small skin distance
             }
-
 
             moveCam *= deltaTime;
             newPos.x += moveVector.x * moveCam;
@@ -251,14 +260,13 @@ function gameLoop(now) {
             if (verbose) console.log("newPos",newPos, "currentPos",currentPos,"moveVector",moveVector);
             const newPosv = newPos;
             const currentPosv = currentPos;
-            const newPos2 = collisionCheck(newPosv,currentPosv, q,1);
+            const newPos2 = collisionCheck(newPosv,currentPosv, q,2);
+            const newPos3 = collisionCheck(newPos2,currentPosv, q,3); //second successive collision check to avoid "sliding" through another wall as a result of the first collision check
+            const newPos4 = collisionCheck(newPos3,currentPosv, q,4); //second successive collision check to avoid "sliding" through another wall as a result of the first collision check
 
-            //second successive collision check to avoid "sliding" through another wall as a result of the first collision check
-            const newPos3 = collisionCheck(newPos2,currentPosv, q,2); 
-
-            newPos.x = newPos3.x;
-            newPos.y = newPos3.y;
-            newPos.z = newPos3.z;            
+            newPos.x = newPos4.x;
+            newPos.y = newPos4.y;
+            newPos.z = newPos4.z;
 
         }
 
@@ -360,12 +368,14 @@ function jump(){
 }
 
 /*---------------------------------*/
-// groundCheck
+// groundCeilingCheck
 /*---------------------------------*/
-let debugArrow = null;
-let firstTimeArrow = true;
+let groundDebugArrow = null;
+let ceilingDebugArrow = null;
 let debugCapsuleBottom = null;
-function groundCheck() {
+let debugCapsuleUp = null;
+let firstTimeArrow = true;
+function groundCeilingCheck() {
 
     const bodyPos = playerBody.translation();
     // Y position of the *bottom* of the capsule (the player's feet).
@@ -373,22 +383,25 @@ function groundCheck() {
     // plus the spherical cap radius to reach the very bottom of the capsule.
     // halfHeight is a bit misleading because it’s not half of the total capsule height, it’s half of the cylindrical part only
     const capsuleBottomY = bodyPos.y - (halfHeight + playerRadius);
+    const capsuleUpY     = bodyPos.y + (halfHeight + playerRadius);
 
+    // const skinDistance      = 0.01;
     const aboveFeetDistance = 0.4;
-    const skinDistance = 0.01;
-    const rayLength = 0.2; // small margin
-    const totalrayLength = aboveFeetDistance+rayLength; // small margin
-    const rayOrigin = {
+    const rayLength         = 0.2;                          // small margin
+    const totalrayLength    = aboveFeetDistance+rayLength;  // small margin
+
+    // GROUND DETECTION
+    const groundRayOrigin = {
         x: bodyPos.x,
         y: capsuleBottomY + aboveFeetDistance, // just above feet
         z: bodyPos.z
     };
 
-    const rayDir = { x: 0, y: -1, z: 0 };
-    const ray = new RAPIER.Ray(rayOrigin, rayDir);
+    const groundRayDir = { x: 0, y: -1, z: 0 };
+    const groundRay = new RAPIER.Ray(groundRayOrigin, groundRayDir);
 
     const groundHit = Shared.physWorld.castRay(
-        ray, 
+        groundRay, 
         totalrayLength, 
         true,              // solid
         undefined,         // filterFlags
@@ -398,6 +411,56 @@ function groundCheck() {
         undefined          // filterPredicate (optional)
     );
 
+    let distanceToGround = 0;
+    if (groundHit != null) {
+        const name = Shared.colliderNameMap.get(groundHit.collider);
+        distanceToGround = groundHit.toi - aboveFeetDistance;
+        updateHighlight(groundHit.collider,0);
+        if (verbose) 
+            console.log("GROUND hit ", name, "at distance", distanceToGround);
+        // console.log("Collider", groundHit.collider, "hit at distance", groundHit.toi, "shape", groundHit.collider.shape);
+        // if (Math.abs(distanceToGround) <= skinDistance) distanceToGround = 0;//discard small distances to avoid jitter
+    } else {
+        if (verbose) 
+            console.log("NOGROUND from origin ", groundRayOrigin);
+    }
+
+    // CEILING DETECTION
+    const ceilingRayOrigin = {
+        x: bodyPos.x,
+        y: capsuleUpY - aboveFeetDistance, // just below head
+        z: bodyPos.z
+    };
+
+    const ceilingRayDir = { x: 0, y: 1, z: 0 };
+    const ceilingRay = new RAPIER.Ray(ceilingRayOrigin, ceilingRayDir);
+
+    const ceilingHit = Shared.physWorld.castRay(
+        ceilingRay, 
+        totalrayLength, 
+        true,              // solid
+        undefined,         // filterFlags
+        undefined,         // filterGroups
+        playerCollider,    // exclude this collider
+        undefined,         // exclude rigidbody (optional)
+        undefined          // filterPredicate (optional)
+    );
+
+    let distanceToCeiling = 0;
+    if (ceilingHit != null) {
+        const name = Shared.colliderNameMap.get(ceilingHit.collider);
+        distanceToCeiling = ceilingHit.toi - aboveFeetDistance;
+        updateHighlight(ceilingHit.collider,1);
+        if (verbose) 
+            console.log("CEILING hit ", name, "at distance", distanceToCeiling);
+        // console.log("Collider", groundHit.collider, "hit at distance", groundHit.toi, "shape", groundHit.collider.shape);
+        // if (Math.abs(distanceToGround) <= skinDistance) distanceToGround = 0;//discard small distances to avoid jitter
+    } else {
+        if (verbose) 
+            console.log("CEILING from origin ", ceilingRayOrigin);
+    }
+
+
     /*---------------*/
     /*---------------*/
     /*---------------*/
@@ -406,52 +469,68 @@ function groundCheck() {
     /*---------------*/
     /*---------------*/
     /*---------------*/
-    if (firstTimeArrow){
+    if (firstTimeArrow) {
         // console.log("FIRSTTIMEARROW");
+        // ground arrow
         firstTimeArrow = false;
-        const origin = new THREE.Vector3(rayOrigin.x, rayOrigin.y, rayOrigin.z);
-        const direction = new THREE.Vector3(rayDir.x, rayDir.y, rayDir.z).normalize();
-        const length = totalrayLength;
-        const color = groundHit ? 0x00ff00 : 0xff0000;
-        debugArrow = new THREE.ArrowHelper(direction, origin, length, color);
-        Shared.colliderDebugGroup.add(debugArrow);
-        // Sphere for capsule bottom
-        const sphereGeometry = new THREE.SphereGeometry(0.05, 8, 8); // radius 5 cm
-        const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
-        debugCapsuleBottom = new THREE.Mesh(sphereGeometry, sphereMaterial);
-        debugCapsuleBottom.position.set(rayOrigin.x, capsuleBottomY, rayOrigin.z);
-        Shared.colliderDebugGroup.add(debugCapsuleBottom);
+        {
+            const origin = new THREE.Vector3(groundRayOrigin.x, groundRayOrigin.y, groundRayOrigin.z);
+            const direction = new THREE.Vector3(groundRayDir.x, groundRayDir.y, groundRayDir.z).normalize();
+            const length = totalrayLength;
+            const color = groundHit ? 0x00ff00 : 0xff0000;
+            groundDebugArrow = new THREE.ArrowHelper(direction, origin, length, color);
+            Shared.colliderDebugGroup.add(groundDebugArrow);
+            // Sphere for capsule bottom
+            const sphereGeometry = new THREE.SphereGeometry(0.05, 8, 8); // radius 5 cm
+            const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            debugCapsuleBottom = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            debugCapsuleBottom.position.set(groundRayOrigin.x, capsuleBottomY, groundRayOrigin.z);
+            Shared.colliderDebugGroup.add(debugCapsuleBottom);
+        }
+        {
+            const origin = new THREE.Vector3(ceilingRayOrigin.x, ceilingRayOrigin.y, ceilingRayOrigin.z);
+            const direction = new THREE.Vector3(ceilingRayDir.x, ceilingRayDir.y, ceilingRayDir.z).normalize();
+            const length = totalrayLength;
+            const color = ceilingHit ? 0x00ff00 : 0xff0000;
+            ceilingDebugArrow = new THREE.ArrowHelper(direction, origin, length, color);
+            Shared.colliderDebugGroup.add(ceilingDebugArrow);
+            // Sphere for capsule bottom
+            const sphereGeometry = new THREE.SphereGeometry(0.05, 8, 8); // radius 5 cm
+            const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            debugCapsuleUp = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            debugCapsuleUp.position.set(ceilingRayOrigin.x, capsuleUpY, ceilingRayOrigin.z);
+            Shared.colliderDebugGroup.add(debugCapsuleUp);
+        }
     } else {
-        // move/update the arrow
-        debugArrow.position.set(rayOrigin.x, rayOrigin.y, rayOrigin.z);
-        debugArrow.setDirection(new THREE.Vector3(rayDir.x, rayDir.y, rayDir.z).normalize());
-        debugArrow.setLength(totalrayLength);
-        debugArrow.setColor(groundHit ? 0x00ff00 : 0xff0000);
-        // Update capsule bottom sphere
-        debugCapsuleBottom.position.set(rayOrigin.x, capsuleBottomY, rayOrigin.z);
+        {        // move/update the arrow
+            groundDebugArrow.position.set(groundRayOrigin.x, groundRayOrigin.y, groundRayOrigin.z);
+            groundDebugArrow.setDirection(new THREE.Vector3(groundRayDir.x, groundRayDir.y, groundRayDir.z).normalize());
+            groundDebugArrow.setLength(totalrayLength);
+            groundDebugArrow.setColor(groundHit ? 0x00ff00 : 0xff0000);
+            // Update capsule bottom sphere
+            debugCapsuleBottom.position.set(groundRayOrigin.x, capsuleBottomY, groundRayOrigin.z);
+        }
+        {        // move/update the arrow
+            ceilingDebugArrow.position.set(ceilingRayOrigin.x, ceilingRayOrigin.y, ceilingRayOrigin.z);
+            ceilingDebugArrow.setDirection(new THREE.Vector3(ceilingRayDir.x, ceilingRayDir.y, ceilingRayDir.z).normalize());
+            ceilingDebugArrow.setLength(totalrayLength);
+            ceilingDebugArrow.setColor(ceilingHit ? 0x00ff00 : 0xff0000);
+            // Update capsule bottom sphere
+            debugCapsuleUp.position.set(ceilingRayOrigin.x, capsuleUpY, ceilingRayOrigin.z);
+        }
     }
     /*---------------*/
     /*---------------*/
     /*---------------*/
     /*---------------*/
 
-    let distanceToGround = 0;
-    if (groundHit != null) {
-        const name = Shared.colliderNameMap.get(groundHit.collider);
-        distanceToGround = groundHit.toi - aboveFeetDistance;
-        updateHighlight(groundHit.collider,0);
-        if (verbose) 
-            console.log("CONTACT hit ", name, "at distance", distanceToGround);
-        // console.log("Collider", groundHit.collider, "hit at distance", groundHit.toi, "shape", groundHit.collider.shape);
-        if (Math.abs(distanceToGround) <= skinDistance) distanceToGround = 0;//discard small distances to avoid jitter
-    } else {
-        if (verbose) 
-            console.log("NOCONTACT from origin ", rayOrigin);
-    }
+
 
     return {
-        hit: (groundHit != null),
-        distance: distanceToGround
+        groundHit: (groundHit != null),
+        groundDistance: distanceToGround,
+        ceilingHit: (ceilingHit != null),
+        ceilingDistance: distanceToCeiling,
     };
 
 }
@@ -534,7 +613,7 @@ function syncCameraToPlayer() {
 }
 
 
-function collisionCheck(newPos, currentPos, currentRot, idx = 1) {
+function collisionCheck(newPos, currentPos, currentRot, idx = 2) {
 
     // Vector from current to new
     const movement = {
@@ -568,42 +647,53 @@ function collisionCheck(newPos, currentPos, currentRot, idx = 1) {
         playerBody,                                           // exclude this rigidbody ✅
     );
 
-    const colDist = 1.0; //any hit returning less than 1 is considered collision within the movement
-    if (hit && hit.toi < colDist) {
+    //any hit returning less than 1 is considered collision within the movement
+    if (hit && hit.toi < 1.0) {
 
         let collidername = Shared.colliderNameMap.get(hit.collider);
-        // if (verbose) 
-        console.log("check" + idx + " hit", collidername, "at fractional distance", hit.toi);
+        if (verbose) 
+            console.log("check" + idx + " hit", collidername, "at fractional distance", hit.toi);
 
-        updateHighlight(hit.collider,idx);
+        //calculate movement to contact and remaining of the movement after contact
+        const distToContact = movementLength * hit.toi;
+        const distRemaining = movementLength - distToContact;
+        const movementToContact = { x: direction.x*distToContact, y: direction.y*distToContact, z: direction.z*distToContact};
+        const movementRemaining = { x: direction.x*distRemaining, y: direction.y*distRemaining, z: direction.z*distRemaining};
 
+        updateHighlight(hit.collider,idx); //colour colliding collider
+
+        if (moveVector.z < -0.5)
+            if (verbose) console.log("THISMOVE"); //useful line for breakpoint
+        
         // We hit something before full movement!
         // Slide along the wall
         const normal = hit.normal1;
-
-        // Project remainingVec onto plane (remove component along normal)
-        if (moveVector.z < -0.5) {
-            if (verbose) console.log("THISMOVE"); //useful line for breakpoint
-        }
-
-        const dotRem = (movement.x * normal.x + movement.y * normal.y + movement.z * normal.z);
+        
+        // Project movementRemaining onto plane (remove component along normal)
+        const dotRem = (movementRemaining.x * normal.x + movementRemaining.y * normal.y + movementRemaining.z * normal.z);
         let slideVec = {
-            x: movement.x - (normal.x * dotRem),
-            y: movement.y - (normal.y * dotRem),
-            z: movement.z - (normal.z * dotRem)
+            x: movementRemaining.x - (normal.x * dotRem),
+            y: movementRemaining.y - (normal.y * dotRem),
+            z: movementRemaining.z - (normal.z * dotRem)
         };
 
         const pushAway = 1e-4;
         if (verbose) 
-            console.log("SLIDE ",
-                "slideVec", slideVec,
-                "x:", slideVec.x + normal.x * pushAway,
-                "y:", slideVec.y + normal.y * pushAway,
-                "z:", slideVec.z + normal.z * pushAway
+            console.log("SLIDE:",
+                        "\n currentPos: ",currentPos,                  
+                        "\n movementToContact:",movementToContact,
+                        "\n slideVec:",slideVec,
+                        "\n normal:",normal
             )
-        newPos.x = currentPos.x + slideVec.x + normal.x * pushAway;
-        newPos.y = currentPos.y + slideVec.y + normal.y * pushAway;
-        newPos.z = currentPos.z + slideVec.z + normal.z * pushAway;
+        //move to contact point, then nudge slighly away along normal
+        newPos.x = currentPos.x + movementToContact.x + normal.x * pushAway; 
+        newPos.y = currentPos.y + movementToContact.y + normal.y * pushAway; 
+        newPos.z = currentPos.z + movementToContact.z + normal.z * pushAway; 
+
+        //then slide along the remaining distance projected onto collider
+        newPos.x += slideVec.x;
+        newPos.y += slideVec.y;
+        newPos.z += slideVec.z;
 
     } else {
         if (verbose)
@@ -645,12 +735,12 @@ function updateDoorsPhysics() {
 
 // outside update loop
 const highlightCollidingMeshes = [];
-const highlightColors = [0xFFFF00, 0xFFA500, 0xFF0000]; // yellow, orange, red
+const highlightColors = [0xCFFF00, 0xFFFF00, 0xFFA500, 0xFF0000]; // green, yellow, orange, red
 const MAX_HIGHLIGHTS = 4; // slightly more than expected collisions
 
 function initHighlightPool(scene) {
     for (let i = 0; i < MAX_HIGHLIGHTS; i++) {
-        const color = highlightColors[i % highlightColors.length]; // cycle if more than 3
+        const color = highlightColors[i % highlightColors.length]; // cycle if more than 4
         const material = new THREE.MeshBasicMaterial({
             color: color,
             transparent: true,
