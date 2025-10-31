@@ -55,7 +55,7 @@ export const moveSpeed = 5;
 // camera offset position
 const cameraOffsetX = 2;
 const cameraOffsetZ = 2;
-export const cameraOffsetY = 1;
+export const cameraOffsetY = 1.3+0.1; //see camera height in game.js
 
 // floor/wall height
 export const WALLHEIGHTDEFAULT = 2;
@@ -155,6 +155,9 @@ export let mainKinematicBody = null;
 // export const rigidBodies = [];
 export const colliderNameMap = new Map();
 export const pendingBodyUpdates = [];
+// collider debug group
+export const colliderDebugGroup = new THREE.Group();
+colliderDebugGroup.name = "colliderDebugGroup";
 
 
 export const gravity       = 9.81;
@@ -213,7 +216,7 @@ export const LoadBtnProgress = document.getElementById('LoadBtnProgress');
 /*-----------------------------------------------------*/
 export async function loadResources() {
     // load all resources into dictionaries from JSON
-    let online = true;
+    let online = false;
     if (online)
         resourcesDict = await loadResourcesFromJson('./assets/resourcesonline.json');
     else
@@ -258,7 +261,7 @@ export async function initRapier(){
     physWorld = new RAPIER.World({ x: 0, y: -gravity, z: 0 });
     console.log('Rapier initialized', physWorld);
 
-    rapierDebug = addRapierDebug(scene,physWorld);
+    rapierDebug = addRapierDebug(physWorld);
 
 // Create an event queue (for collision/contact events)
     physEventQueue = new RAPIER.EventQueue(true); // "true" = auto drain    
@@ -268,6 +271,9 @@ export async function initRapier(){
 
     mainKinematicBody = physWorld.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
     mainKinematicBody.userData = { name: "mainKinematicBody"};
+
+    //add collider debug group to scene
+    scene.add(colliderDebugGroup);
 
     // debugRender = new RAPIER.DebugRenderPipeline();
     // physWorld.debugRender = debugRender;    
@@ -846,13 +852,13 @@ function rotatePivot(pivot, axis, targetAngle, duration = 1, body = null, pivotO
 
 
 export function addRapierDebugExp(){
-    rapierDebug = addRapierDebug(scene,physWorld);
+    rapierDebug = addRapierDebug(physWorld);
 }
 
 
 
 // call after Rapier.init() and after you have a world
-function addRapierDebug(scene, world) {
+function addRapierDebug(world) {
     // geometry & material for line segments
     const debugGeo = new THREE.BufferGeometry();
     // start empty; we'll allocate when we get data
@@ -867,7 +873,7 @@ function addRapierDebug(scene, world) {
 
     const debugLines = new THREE.LineSegments(debugGeo, debugMat);
     debugLines.frustumCulled = false;
-    scene.add(debugLines);
+    colliderDebugGroup.add(debugLines);
 
     // helper to update per-frame
     function updateDebug() {
@@ -949,14 +955,19 @@ function addRapierDebug(scene, world) {
         debugLines.visible = !debugLines.visible;
     }
 
+    function isVisible() {
+        return debugLines.visible;
+    }
+
     return {
         debugLines,
         update: updateDebug,
         hide,
         show,
         toggle,
+        isVisible,
         dispose() {
-            scene.remove(debugLines);
+            colliderDebugGroup.remove(debugLines);
             debugGeo.dispose();
             debugMat.dispose();
         }
