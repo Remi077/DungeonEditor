@@ -9,27 +9,27 @@ import * as GameHUD from './gameHUD.js';
 // GAMEPLAY VARIABLES
 /*---------------------------------*/
 
-// Player dimensions
-const playerHeight = 1.8;
-const cameraHeight = 1.3;
-const cameraHeightFromCapsuleCenter = cameraHeight-playerHeight/2;
-const playerRadius = 0.4;
+// Player physical and camera setup
+
+const playerHeight = 1.8; // total player height in meters
+const cameraHeight = 1.3; // desired camera (eye) height above the floor
+// const cameraHeight = Shared.cameraOffsetY; // desired camera (eye) height above the floor
+const playerRadius = 0.4; // radius of the capsule collider
+
+// Distance from capsule center (which is halfway up the capsule) to the camera position.
+// Needed because Rapier places the capsule's origin at its center, not at the feet.
+const cameraHeightFromCapsuleCenter = cameraHeight - playerHeight / 2;
+
+// Half-height of the *cylindrical part* of the capsule.
+// The capsule’s total height = 2 * halfHeight + 2 * radius = playerHeight
+// halfHeight is a bit misleading because it’s not half of the total capsule height, it’s half of the cylindrical part only
 const halfHeight = (playerHeight / 2) - playerRadius;
 
-// door variables
-let doorSprites   = [];
-let doorPosition  = [];
-let doorRotCur    = 0;
-let doorRotTarget = 0;
-let doorRotTime   = 0;
-let movingDoor    = false;
-const minDistancefromWalls = 0.2 * Shared.cellSize;
 
 // move variables
 let moveVector = new THREE.Vector3();
 
 // jump variables
-const groundLevel   = Shared.cameraOffsetY;
 //max height
 //kinetic e = potential e
 //(1/2)mv^2=mgh
@@ -42,6 +42,13 @@ let   verticalSpeed = 0;
 // let isJumping = false;
 let jumpPressed = false;
 
+
+// max slope in degrees you want to treat as "floor"
+const maxSlopeDeg = 55;
+const maxSlopeRad = THREE.MathUtils.degToRad(maxSlopeDeg);
+// vertical threshold = cosine of slope
+const verticalThreshold = Math.cos(maxSlopeRad);
+
 //inventory
 const playerState = {
     "health": 100,
@@ -52,17 +59,16 @@ const playerState = {
 // actions variables
 export let Actions={};
 let gameId = null;
-let hasInteracted = false;
 
 export let ActionToKeyMap = {
-    moveCamRight   : { key: 'KeyD' },
-    moveCamLeft    : { key: 'KeyA' },
-    moveCamFront   : { key: 'KeyW' },
-    moveCamBack: { key: 'KeyS' },
-    startGame      : { key: 'KeyG', OnPress: true },
-    jump           : { key: 'Space', OnPress: true },
-    interact       : { key: 'KeyE', OnPress: true },
-    hideCol        : { key: 'KeyH', OnPress: true },
+    moveCamRight: { key: 'KeyD' },
+    moveCamLeft : { key: 'KeyA' },
+    moveCamFront: { key: 'KeyW' },
+    moveCamBack : { key: 'KeyS' },
+    startGame   : { key: 'KeyG', OnPress: true },
+    jump        : { key: 'Space', OnPress: true },
+    interact    : { key: 'KeyE', OnPress: true },
+    hideCol     : { key: 'KeyH', OnPress: true },
 };
 
 /*---------------------------------*/
@@ -73,6 +79,7 @@ let playerBody = null;
 let playerColliderDesc = null;
 let playerCollider = null;
 export function startGameLoop() {
+
     Shared.resetAllActions();
     Shared.editorState.gameRunning = true;
     // Shared.editorState.pause = false;
@@ -87,11 +94,7 @@ export function startGameLoop() {
     document.addEventListener("mouseup", onMouseUp, false);
     // document.addEventListener("wheel", onMouseWheel, { passive: false });
 
-
-
-
     firstFrame = true;
-
 
     const campos = Shared.yawObject.position;
     if (firstInit){
@@ -99,9 +102,9 @@ export function startGameLoop() {
         // --- Create kinematic body ---
         const playerBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
         .setTranslation(campos.x, campos.y+cameraHeightFromCapsuleCenter, campos.z); // initial position where camera is
-        // .setTranslation(2, halfHeight+playerRadius, 2); // initial position
 
         playerBody = Shared.physWorld.createRigidBody(playerBodyDesc);
+        playerBody.userData = { name: "playerBody" };
 
         // --- Create capsule collider ---
         playerColliderDesc = RAPIER.ColliderDesc.capsule(halfHeight, playerRadius)
@@ -110,19 +113,16 @@ export function startGameLoop() {
 
         playerCollider = Shared.physWorld.createCollider(playerColliderDesc, playerBody);
         Shared.colliderNameMap.set(playerCollider,"playerCollider");
+        playerCollider.userData = { name: "playerCollider" };
 
-        // Store reference
-        // Shared.playerBody = playerBody;
+        initHighlightPool(Shared.scene);
+
     } else {
         playerBody.setNextKinematicTranslation(
             campos.x, campos.y+cameraHeightFromCapsuleCenter, campos.z
         );
-        // myworldstep();
-        // Shared.physWorld.step();//so that the rigidbody reposition is taken in account
-        // skipOneFrame = true;//the first frame is needed to reposition the player rigidbody 
+        playerBody.userData = { name: "playerBody" };
     }
-
-    // Shared.rapierDebug.dispose();
 
 }
 
@@ -145,6 +145,7 @@ export function stopGameLoop() {
 let lastUVUpdate = 0;
 let firstFrame = true;
 let isTouchingGround = false;
+const verbose = false;
 // let skipOneFrame = false;
 const uvUpdateInterval = 0.07; // seconds between updates
 function gameLoop(now) {
@@ -173,14 +174,12 @@ function gameLoop(now) {
         //in that loop to avoid resampling
         Shared.releaseSingleEventActions();
 
+        //debug only: clear visibility of colliding meshes
+        hideAllHighlights();
+
         //calculate move vector
         moveVector.normalize();
         moveVector.applyEuler(new THREE.Euler(0, Shared.yawObject.rotation.y, 0));
-
-        // console.log(moveVector);
-
-        //move player along vector, record previous position
-        // let prevpos = Shared.yawObject.position.clone();
 
         // 1️⃣ Get the current body translation
         const currentPos = playerBody.translation();
@@ -221,13 +220,17 @@ function gameLoop(now) {
                 verticalSpeed -= Shared.gravity * deltaTime;
                 // Clamp to max fall speed
                 if (verticalSpeed < -Shared.maxFallSpeed) verticalSpeed = -Shared.maxFallSpeed;
-            } else {
+            } else if (result.distance < 0.05) {
                 if (jumpPressed){
                     verticalSpeed = jumpSpeed;
                     jumpPressed = false;
                 } else {
                     verticalSpeed = 0; //cancel speed
+                    if (verbose) 
+                        console.log("STICKING from ", newPos.y ,"to ",newPos.y - result.distance, " (distance:",result.distance,")" );
                     newPos.y -= result.distance; //snap to floor with small skin distance
+                    newPos.y += 0.02; //small skin distance
+                    // console.log("STICKING at ",newPos.y, " ",result.distance );
                 }
             }
 
@@ -245,152 +248,25 @@ function gameLoop(now) {
             // WALL DETECTION //
             /*----------------*/
 
-
+            if (verbose) console.log("newPos",newPos, "currentPos",currentPos,"moveVector",moveVector);
             const newPosv = newPos;
             const currentPosv = currentPos;
-            const newPos2 = collisionCheck(newPosv,currentPosv, q);
+            const newPos2 = collisionCheck(newPosv,currentPosv, q,1);
 
-            // newPos.x = newPos2.x;
-            // newPos.y = newPos2.y;
-            // newPos.z = newPos2.z;
-
-            // const newPosv2 = newPos2;
             //second successive collision check to avoid "sliding" through another wall as a result of the first collision check
-            const newPos3 = collisionCheck(newPos2,currentPosv, q); 
+            const newPos3 = collisionCheck(newPos2,currentPosv, q,2); 
 
             newPos.x = newPos3.x;
             newPos.y = newPos3.y;
             newPos.z = newPos3.z;            
 
-
-            // // Vector from current to new
-            // const movement = {
-            // x: newPos.x - currentPos.x,
-            // y: newPos.y - currentPos.y,
-            // z: newPos.z - currentPos.z,
-            // };
-            // // Raycast-like shape movement
-            // const movementLength = Math.hypot(movement.x, movement.y, movement.z);
-            // const direction = {
-            // x: movement.x / (movementLength || 1),
-            // y: movement.y / (movementLength || 1),
-            // z: movement.z / (movementLength || 1),
-            // };
-
-            // const maxToi = movementLength; // maximum distance to check
-            // const filterFlags = RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC; // ignore dynamic bodies
-            // const hit = Shared.physWorld.castShape(
-            // { x: currentPos.x, y: currentPos.y, z: currentPos.z },
-            // q, // your capsule rotation
-            // direction,
-            // playerColliderDesc.shape,
-            // maxToi,
-            // undefined, // no complex filter
-            // filterFlags
-            // );
-
-            // const colDist = 1.0;
-            // // const colDist = movementLength;
-            // if (hit && hit.toi < colDist) {
-            // // if (hit && hit.toi < 0.5) {
-
-            //     let collidername = Shared.colliderNameMap.get(hit.collider);
-            //     // console.log("hit ", collidername ,"at distance",hit.toi);
-
-            //     // We hit something before full movement!
-            //     // Slide along the wall
-            //     const normal = hit.normal1;
-
-            //     // remaining distance vector = (desired move) * (1 - toi)
-            //     // direction is assumed normalized and movementLength is the full desired distance
-            //     const remainingDist = movementLength * (colDist - hit.toi);
-            //     // const remainingDist =  hit.toi * movementLength;
-            //     // console.log(remainingDist);
-            //     const remainingVec = {
-            //         x: direction.x * remainingDist,
-            //         y: direction.y * remainingDist,
-            //         z: direction.z * remainingDist
-            //     };
-
-            //     // Project remainingVec onto plane (remove component along normal)
-            //     const dotRem = (remainingVec.x * normal.x + remainingVec.y * normal.y + remainingVec.z * normal.z);
-            //     let slideVec = {
-            //         x: remainingVec.x - (normal.x * dotRem),
-            //         y: remainingVec.y - (normal.y * dotRem),
-            //         z: remainingVec.z - (normal.z * dotRem)
-            //     };
-
-            //     // Decide if the surface is too steep (a wall) using upDot
-            //     const upDot = normal.y; // Y is up
-            //     // Only cancel upward movement on steep surfaces (we still want to fall when jumping on walls)
-            //     if (
-            //         slideVec.y > 0 && 
-            //         upDot < Shared.maxSlopeCos
-            //     ) {
-            //         // console.log("TOOSTEEP");
-            //         if (!isTouchingGround) console.log("Y CANCEL BUT WAS FALLING");
-            //         // Too steep — disallow vertical motion for sliding
-            //         slideVec.y = 0;
-            //     }
-
-            //     const skin = 0.001;
-            //     const slideLenMi = 1e-6;
-            //     // const slideLenMi = Infinity;
-            //     // let correction = skin - dotRem;
-            //     let correction = 1e-4 ;
-            //     // if (correction < 0.001) correction = 0 ;
-            //     // if (correction < 0.1) correction = 0 ;
-            //     // correction*=0.01;
-            //     const slideLen = Math.hypot(slideVec.x, slideVec.y, slideVec.z);
-            //     // if (slideLen > 1e-6) {
-            //     if (slideLen > slideLenMi) {
-            //         // const pushAway = 1e-3;
-            //         const pushAway = correction;
-            //         // const pushAway = skin - dotRem;
-            //         // const pushAway = dotRem;
-            //         // const pushAway = 0;
-            //         newPos.x = currentPos.x + slideVec.x + normal.x * pushAway;
-            //         newPos.y = currentPos.y + slideVec.y + normal.y * pushAway;
-            //         newPos.z = currentPos.z + slideVec.z + normal.z * pushAway;
-            //     } else {
-            //         console.log("BACKOFF");
-            //         // const backOff = 1e-3;
-            //         const backOff = correction;
-            //         // newPos.x = currentPos.x + direction.x * (hit.toi * movementLength - backOff);
-            //         // newPos.y = currentPos.y + direction.y * (hit.toi * movementLength - backOff);
-            //         // newPos.z = currentPos.z + direction.z * (hit.toi * movementLength - backOff);
-
-            //         newPos.x = currentPos.x + direction.x * (remainingDist - backOff);
-            //         newPos.y = currentPos.y + direction.y * (remainingDist - backOff);
-            //         newPos.z = currentPos.z + direction.z * (remainingDist - backOff);                    
-            //     }
-            //     // console.log(newPos.z);
-
-            // } else {
-            //     console.log("NOHIT");
-            // }
-
         }
-
-
 
         // 4️⃣ Apply rotation first
         playerBody.setNextKinematicRotation(q);
 
         // 5️⃣ Then apply translation
         playerBody.setNextKinematicTranslation(newPos);
-
-        // isTouchingGround();
-
-        //check if touching ground
-
-        //check for collision
-        // const { isCollidingX, isCollidingZ } = isColliding(Shared.yawObject,moveVector);
-
-        //if colliding revert to previous position
-        // if (isCollidingX) Shared.yawObject.position.x = prevpos.x;
-        // if (isCollidingZ) Shared.yawObject.position.z = prevpos.z;
-        
 
 
         //TOIMPROVE: call it in a recursive scheduled on next frame function
@@ -416,29 +292,15 @@ function gameLoop(now) {
         Stats.stats.end();
 
         if (Shared.physWorld){
-            // Shared.physWorld.step(Shared.physEventQueue);
-            // Shared.physWorld.step();
+
             updateDoorsPhysics();
 
             myworldstep();
 
-            syncCameraToPlayer();                   // camera follows capsule
-
+            syncCameraToPlayer(); // camera follows capsule
 
             Shared.rapierDebug.update();
             
-            // Update Rapier's debug data
-            // Shared.physWorld.debugRender.clear();
-            // Shared.physWorld.debugRender.render(Shared.physWorld);
-            // // Get debug vertices
-            // const vertices = Shared.physWorld.debugRender.vertices;
-            // Shared.debugGeometry.setAttribute(
-            // "position",
-            // new THREE.Float32BufferAttribute(vertices, 3)
-            // );
-            // Shared.debugGeometry.computeBoundingSphere();
-            // Shared.debugGeometry.attributes.position.needsUpdate = true;
-
         }
 
     }
@@ -483,106 +345,6 @@ function executeActions() {
 }
 
 /*---------------------------------*/
-// IsColliding
-// /*---------------------------------*/
-// function isColliding(actor, moveVectorv) {
-
-//     let isCollidingX = false;
-//     let isCollidingZ = false;
-//     // let colliderX1 = null;
-//     // let colliderX2 = null;
-//     // let colliderZ1 = null;
-//     // let colliderZ2 = null;
-//     const posx = Math.floor(actor.position.x);
-//     const posz = Math.floor(actor.position.z);
-//     const csize = Shared.cellSize;
-//     let k,k2;
-    
-//     if (moveVectorv.x < 0) //camera moving towards decreasing X
-//     {
-//         k = Shared.getGridKey(posx, 0, posz);
-//         k2 = Shared.getGridKey(posx-1, 0, posz);
-//         const cell = Shared.gridMap.XZ.get(k2);
-//         if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("PILLAR"))))) {
-//             isCollidingX = ((actor.position.x - posx) % csize) <= minDistancefromWalls;
-//             // colliderX1 = Shared.gridMapYZ.get(k);
-//         } 
-//     } else {//camera moving towards increasing X
-//         k = Shared.getGridKey(posx + 1, 0, posz);
-//         const cell = Shared.gridMap.XZ.get(k);
-//         if (Shared.gridMap.YZ.has(k) || ((cell && Object.keys(cell).some(key => key.startsWith("PILLAR"))))) {
-//             isCollidingX = ((actor.position.x - posx) % csize) >= (csize - minDistancefromWalls);
-//             // colliderX2 = Shared.gridMapYZ.get(k);
-//         }
-//     }
-
-//     if (moveVectorv.z < 0) //camera moving towards decreasing Z
-//     {
-//         k = Shared.getGridKey(posx, 0, posz);
-//         k2 = Shared.getGridKey(posx, 0, posz-1);
-//         const cell = Shared.gridMap.XZ.get(k2);
-//         if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("PILLAR")))) {
-//             isCollidingZ = ((actor.position.z - posz) % csize) <= minDistancefromWalls;
-//             // colliderZ1 = Shared.gridMapXY.get(k);
-//         }
-//     } else {//camera moving towards increasing Z
-//         k = Shared.getGridKey(posx, 0, posz + 1);
-//         const cell = Shared.gridMap.XZ.get(k);
-//         if (Shared.gridMap.XY.has(k) || (cell && Object.keys(cell).some(key => key.startsWith("PILLAR")))) {
-//             isCollidingZ = ((actor.position.z - posz) % csize) >= (csize - minDistancefromWalls);
-//             // colliderZ2 = Shared.gridMapXY.get(k);
-//         }
-//     }
-    
-//     // console.log("playerpos", Math.floor(Shared.yawObject.position.x),Math.floor(Shared.yawObject.position.z));
-//     // console.log("isColliding", isCollidingX,isCollidingZ);
-//     // console.log("colliderX", colliderX1?.position,colliderX2?.position);
-//     // console.log("colliderZ", colliderZ1?.position,colliderZ2?.position);
-
-//     return {
-//         isCollidingX: isCollidingX,
-//         isCollidingZ: isCollidingZ
-//     };
-// }
-
-
-/*---------------------------------*/
-// moveDoor
-/*---------------------------------*/
-function moveDoor(delta) {
-    return;
-    if (hasInteracted) {
-
-        let d = doorPosition[0].position.distanceTo(Shared.yawObject.position);
-        let withinReach = d < 1.8;
-        if (!withinReach) {
-            hasInteracted = false;
-            return;
-        }
-
-        doorRotCur = doorSprites[0].rotation.y;
-        if (doorRotCur > 1)
-            doorRotTarget = 0;
-        else
-            doorRotTarget = (Math.PI / 2);
-        doorRotTime = 0;
-        hasInteracted = false;
-        movingDoor = true;
-    }
-    if (movingDoor) {
-        doorSprites.forEach(door => {
-            doorRotTime += deltaTime;
-            door.rotation.y = doorRotCur + (doorRotTarget - doorRotCur) * doorRotTime / 2;
-            if (doorRotTime > 2) {
-                door.rotation.y = doorRotTarget;
-                movingDoor = false;
-            }
-        }
-        );
-    }
-}
-
-/*---------------------------------*/
 // jump related functions 
 /*---------------------------------*/
 
@@ -598,61 +360,34 @@ function jump(){
 }
 
 /*---------------------------------*/
-// isTouchingGround
+// groundCheck
 /*---------------------------------*/
-// function isTouchingGround() {
-//     const posfeet=(Shared.yawObject.position.y-Shared.cameraOffsetY);
-//     const posy = Math.floor(posfeet/Shared.cellSize);
-//     const posx = Math.floor(Shared.yawObject.position.x/Shared.cellSize);
-//     const posz = Math.floor(Shared.yawObject.position.z/Shared.cellSize);
-//     const k = Shared.getGridKey(posx, posy, posz);
-//     const thiscell = Shared.gridMap.XZ.get(k);
-//     const thisCellIsPlane = ((thiscell && Object.keys(thiscell).some(key => key.startsWith("PLANE"))));
-
-//     if (!thisCellIsPlane) return false;
-//     return ((posfeet%Shared.cellSize) < 0.1);
-    
-//     return (Shared.yawObject.position.y - groundLevel) < Shared.EPSILON;
-// }
-
-
-
-// function isTouchingGround() {
-
-//     const contacts = [];
-//     Shared.physWorld.contactsWith(playerColliderDesc, (otherCollider) => {
-//         contacts.push(otherCollider);
-//     });
-//     if (contacts.length > 0) {
-//         console.log("Player is currently in contact with", contacts.length, "objects");
-//         return true;
-//     } else {
-//         return false;
-//     }
-
-// }
-
+let debugArrow = null;
+let firstTimeArrow = true;
+let debugCapsuleBottom = null;
 function groundCheck() {
 
     const bodyPos = playerBody.translation();
+    // Y position of the *bottom* of the capsule (the player's feet).
+    // The capsule's center is at bodyPos.y, so we subtract the cylinder half-height
+    // plus the spherical cap radius to reach the very bottom of the capsule.
+    // halfHeight is a bit misleading because it’s not half of the total capsule height, it’s half of the cylindrical part only
     const capsuleBottomY = bodyPos.y - (halfHeight + playerRadius);
 
     const aboveFeetDistance = 0.4;
-    // const aboveFeetDistance = 0.1;
     const skinDistance = 0.01;
-    const rayLength = 0.05; // small margin
+    const rayLength = 0.2; // small margin
     const totalrayLength = aboveFeetDistance+rayLength; // small margin
     const rayOrigin = {
         x: bodyPos.x,
         y: capsuleBottomY + aboveFeetDistance, // just above feet
-        // y: capsuleBottomY + 0.01 , // just above feet
         z: bodyPos.z
     };
 
     const rayDir = { x: 0, y: -1, z: 0 };
     const ray = new RAPIER.Ray(rayOrigin, rayDir);
 
-    const isGrounded = Shared.physWorld.castRay(
+    const groundHit = Shared.physWorld.castRay(
         ray, 
         totalrayLength, 
         true,              // solid
@@ -663,65 +398,64 @@ function groundCheck() {
         undefined          // filterPredicate (optional)
     );
 
+    /*---------------*/
+    /*---------------*/
+    /*---------------*/
+    /*---------------*/
+    // DRAW A DEBUG LINE
+    /*---------------*/
+    /*---------------*/
+    /*---------------*/
+    if (firstTimeArrow){
+        // console.log("FIRSTTIMEARROW");
+        firstTimeArrow = false;
+        const origin = new THREE.Vector3(rayOrigin.x, rayOrigin.y, rayOrigin.z);
+        const direction = new THREE.Vector3(rayDir.x, rayDir.y, rayDir.z).normalize();
+        const length = totalrayLength;
+        const color = groundHit ? 0x00ff00 : 0xff0000;
+        debugArrow = new THREE.ArrowHelper(direction, origin, length, color);
+        Shared.colliderDebugGroup.add(debugArrow);
+        // Sphere for capsule bottom
+        const sphereGeometry = new THREE.SphereGeometry(0.05, 8, 8); // radius 5 cm
+        const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+        debugCapsuleBottom = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        debugCapsuleBottom.position.set(rayOrigin.x, capsuleBottomY, rayOrigin.z);
+        Shared.colliderDebugGroup.add(debugCapsuleBottom);
+    } else {
+        // move/update the arrow
+        debugArrow.position.set(rayOrigin.x, rayOrigin.y, rayOrigin.z);
+        debugArrow.setDirection(new THREE.Vector3(rayDir.x, rayDir.y, rayDir.z).normalize());
+        debugArrow.setLength(totalrayLength);
+        debugArrow.setColor(groundHit ? 0x00ff00 : 0xff0000);
+        // Update capsule bottom sphere
+        debugCapsuleBottom.position.set(rayOrigin.x, capsuleBottomY, rayOrigin.z);
+    }
+    /*---------------*/
+    /*---------------*/
+    /*---------------*/
+    /*---------------*/
+
     let distanceToGround = 0;
-    if (isGrounded != null) {
-        const name = Shared.colliderNameMap.get(isGrounded.collider);
-        // console.log("contact with", name, "at distance", isGrounded.toi);
-        // console.log("Collider", isGrounded.collider, "hit at distance", isGrounded.toi, "shape", isGrounded.collider.shape);
-        distanceToGround = isGrounded.toi - aboveFeetDistance;
+    if (groundHit != null) {
+        const name = Shared.colliderNameMap.get(groundHit.collider);
+        distanceToGround = groundHit.toi - aboveFeetDistance;
+        updateHighlight(groundHit.collider,0);
+        if (verbose) 
+            console.log("CONTACT hit ", name, "at distance", distanceToGround);
+        // console.log("Collider", groundHit.collider, "hit at distance", groundHit.toi, "shape", groundHit.collider.shape);
         if (Math.abs(distanceToGround) <= skinDistance) distanceToGround = 0;//discard small distances to avoid jitter
     } else {
-        console.log("NOCONTACT");
+        if (verbose) 
+            console.log("NOCONTACT from origin ", rayOrigin);
     }
 
     return {
-        hit: (isGrounded != null),
+        hit: (groundHit != null),
         distance: distanceToGround
     };
 
 }
 
-
-/*---------------------------------*/
-// updateVerticalSpeed
-/*---------------------------------*/
-// function groundCheck(deltaTime){
-//     let groundCheck = isTouchingGround();
-
-//     if (!groundCheck.hit){
-//         verticalSpeed -= Shared.gravity * deltaTime;
-//         // Clamp to max fall speed
-//         if (verticalSpeed < -Shared.maxFallSpeed) verticalSpeed = -Shared.maxFallSpeed;
-//     } else {
-//         verticalSpeed = 0;
-//     }
-//     return groundCheck.distance;
-// }
-
-/*---------------------------------*/
-// updateVerticalPosition
-/*---------------------------------*/
-function updateVerticalPosition(deltaTime){
-    // Shared.yawObject.position.y += verticalSpeed * deltaTime;
-    const pt = playerBody.translation();
-
-    // 2️⃣ Compute the target position
-    const newPos = {
-    x: pt.x ,
-    y: pt.y + verticalSpeed * deltaTime,
-    z: pt.z 
-    };
-    playerBody.setNextKinematicRotation(newPos);
-
-}
-
-/*---------------------------------*/
-// verticalUpdate
-/*---------------------------------*/
-function verticalUpdate(deltaTime){
-    // updateVerticalPosition(deltaTime);
-    updateVerticalSpeed(deltaTime);
-}
 
 /*---------------------------------*/
 // interact related functions 
@@ -773,7 +507,7 @@ function raycastActionnables(){
                 parentActionnable = parentActionnable.parent;
             }
             selectObject = parentActionnable || selectObject;
-            console.log("HIT",selectObject.name);
+            // console.log("CLICKHIT",selectObject.name);
         }
         // console.log("HIT");
         // console.log(closestHit.object?.userData);
@@ -800,34 +534,7 @@ function syncCameraToPlayer() {
 }
 
 
-
-// // Move player capsule in the physics world
-// function updatePlayerKinematic(moveVec, delta) {
-//   const body = playerBody;
-
-//   // Get current position
-//   const t = body.translation();
-//   const pos = new THREE.Vector3(t.x, t.y, t.z);
-
-//   // Gravity (manual)
-//   Shared.playerVelocity.y -= 9.81 * delta;
-
-//   // Apply input movement (already rotated by yaw)
-//   pos.addScaledVector(moveVec, Shared.playerSpeed * delta);
-//   pos.y += Shared.playerVelocity.y * delta;
-
-//   // Prevent falling below the floor (optional)
-//   if (pos.y < 1) {
-//     pos.y = 1;
-//     Shared.playerVelocity.y = 0;
-//   }
-
-//   // Update Rapier body
-//   body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
-// }
-
-
-function collisionCheck(newPos, currentPos, currentRot) {
+function collisionCheck(newPos, currentPos, currentRot, idx = 1) {
 
     // Vector from current to new
     const movement = {
@@ -842,98 +549,65 @@ function collisionCheck(newPos, currentPos, currentRot) {
         y: movement.y / (movementLength || 1),
         z: movement.z / (movementLength || 1),
     };
+    const shapeVel = {
+        x: direction.x * movementLength,
+        y: direction.y * movementLength,
+        z: direction.z * movementLength
+    };
 
-    const maxToi = movementLength; // maximum distance to check
-    const filterFlags = RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC; // ignore dynamic bodies
     const hit = Shared.physWorld.castShape(
-        { x: currentPos.x, y: currentPos.y, z: currentPos.z },
-        currentRot, // your capsule rotation
-        direction,
-        playerColliderDesc.shape,
-        maxToi,
-        undefined, // no complex filter
-        filterFlags
+        { x: currentPos.x, y: currentPos.y, z: currentPos.z }, // shapePos
+        currentRot,                                           // shapeRot
+        shapeVel,                                             // shapeVel
+        playerColliderDesc.shape,                             // shape
+        1.0,                                                  // maxToi (distance multiplier)
+        true,                                                 // stopAtPenetration
+        null,                                                 // filterFlags
+        null,                                                 // filterGroups
+        playerCollider,                                       // exclude this collider ✅
+        playerBody,                                           // exclude this rigidbody ✅
     );
 
-    const colDist = 1.0;
-    // const colDist = movementLength;
+    const colDist = 1.0; //any hit returning less than 1 is considered collision within the movement
     if (hit && hit.toi < colDist) {
-        // if (hit && hit.toi < 0.5) {
 
         let collidername = Shared.colliderNameMap.get(hit.collider);
-        // console.log("hit ", collidername ,"at distance",hit.toi);
+        // if (verbose) 
+        console.log("check" + idx + " hit", collidername, "at fractional distance", hit.toi);
+
+        updateHighlight(hit.collider,idx);
 
         // We hit something before full movement!
         // Slide along the wall
         const normal = hit.normal1;
 
-        // remaining distance vector = (desired move) * (1 - toi)
-        // direction is assumed normalized and movementLength is the full desired distance
-        const remainingDist = movementLength * (colDist - hit.toi);
-        // const remainingDist =  hit.toi * movementLength;
-        // console.log(remainingDist);
-        const remainingVec = {
-            x: direction.x * remainingDist,
-            y: direction.y * remainingDist,
-            z: direction.z * remainingDist
-        };
-
         // Project remainingVec onto plane (remove component along normal)
-        const dotRem = (remainingVec.x * normal.x + remainingVec.y * normal.y + remainingVec.z * normal.z);
+        if (moveVector.z < -0.5) {
+            if (verbose) console.log("THISMOVE"); //useful line for breakpoint
+        }
+
+        const dotRem = (movement.x * normal.x + movement.y * normal.y + movement.z * normal.z);
         let slideVec = {
-            x: remainingVec.x - (normal.x * dotRem),
-            y: remainingVec.y - (normal.y * dotRem),
-            z: remainingVec.z - (normal.z * dotRem)
+            x: movement.x - (normal.x * dotRem),
+            y: movement.y - (normal.y * dotRem),
+            z: movement.z - (normal.z * dotRem)
         };
 
-        // Decide if the surface is too steep (a wall) using upDot
-        const upDot = normal.y; // Y is up
-        // Only cancel upward movement on steep surfaces (we still want to fall when jumping on walls)
-        // if (
-        //     slideVec.y > 0 &&
-        //     upDot < Shared.maxSlopeCos
-        // ) {
-        //     // console.log("TOOSTEEP");
-        //     if (!isTouchingGround) console.log("Y CANCEL BUT WAS FALLING");
-        //     // Too steep — disallow vertical motion for sliding
-        //     slideVec.y = 0;
-        // }
-
-        const skin = 0.001;
-        const slideLenMi = 1e-6;
-        // const slideLenMi = Infinity;
-        // let correction = skin - dotRem;
-        let correction = 1e-4;
-        // if (correction < 0.001) correction = 0 ;
-        // if (correction < 0.1) correction = 0 ;
-        // correction*=0.01;
-        const slideLen = Math.hypot(slideVec.x, slideVec.y, slideVec.z);
-        // if (slideLen > 1e-6) {
-        if (slideLen > slideLenMi) {
-            // const pushAway = 1e-3;
-            const pushAway = correction;
-            // const pushAway = skin - dotRem;
-            // const pushAway = dotRem;
-            // const pushAway = 0;
-            newPos.x = currentPos.x + slideVec.x + normal.x * pushAway;
-            newPos.y = currentPos.y + slideVec.y + normal.y * pushAway;
-            newPos.z = currentPos.z + slideVec.z + normal.z * pushAway;
-        } else {
-            console.log("BACKOFF");
-            // const backOff = 1e-3;
-            const backOff = correction;
-            // newPos.x = currentPos.x + direction.x * (hit.toi * movementLength - backOff);
-            // newPos.y = currentPos.y + direction.y * (hit.toi * movementLength - backOff);
-            // newPos.z = currentPos.z + direction.z * (hit.toi * movementLength - backOff);
-
-            newPos.x = currentPos.x + direction.x * (remainingDist - backOff);
-            newPos.y = currentPos.y + direction.y * (remainingDist - backOff);
-            newPos.z = currentPos.z + direction.z * (remainingDist - backOff);
-        }
-        // console.log(newPos.z);
+        const pushAway = 1e-4;
+        if (verbose) 
+            console.log("SLIDE ",
+                "slideVec", slideVec,
+                "x:", slideVec.x + normal.x * pushAway,
+                "y:", slideVec.y + normal.y * pushAway,
+                "z:", slideVec.z + normal.z * pushAway
+            )
+        newPos.x = currentPos.x + slideVec.x + normal.x * pushAway;
+        newPos.y = currentPos.y + slideVec.y + normal.y * pushAway;
+        newPos.z = currentPos.z + slideVec.z + normal.z * pushAway;
 
     } else {
-        // console.log("NOHIT");
+        if (verbose)
+            console.log("NOHIT");
     }
 
     return newPos;
@@ -941,10 +615,9 @@ function collisionCheck(newPos, currentPos, currentRot) {
 }
 
 function toggleHideCollider(){
-    Shared.rapierDebug.toggle();
+    // Shared.rapierDebug.toggle();
+    Shared.colliderDebugGroup.visible = !Shared.colliderDebugGroup.visible;
 }
-
-
 
 function updateDoorsPhysics() {
   for (const update of Shared.pendingBodyUpdates) {
@@ -959,4 +632,78 @@ function updateDoorsPhysics() {
 
     }
   Shared.pendingBodyUpdates.length = 0; // clear for next frame
+}
+
+
+
+
+
+
+/*-----------------------------------*/
+// HIGHLIGHT COLLIDERS               //
+/*-----------------------------------*/
+
+// outside update loop
+const highlightCollidingMeshes = [];
+const highlightColors = [0xFFFF00, 0xFFA500, 0xFF0000]; // yellow, orange, red
+const MAX_HIGHLIGHTS = 4; // slightly more than expected collisions
+
+function initHighlightPool(scene) {
+    for (let i = 0; i < MAX_HIGHLIGHTS; i++) {
+        const color = highlightColors[i % highlightColors.length]; // cycle if more than 3
+        const material = new THREE.MeshBasicMaterial({
+            color: color,
+            transparent: true,
+            opacity: 0.5,
+            // wireframe: true,      // show edges
+            // depthTest: false,
+            // depthWrite: false
+        });
+
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), material);
+        mesh.name = "highlightCollidingMeshes_"+i;
+        mesh.renderOrder = 999;   // always in front
+        mesh.visible = false;
+        highlightCollidingMeshes.push(mesh);
+        Shared.colliderDebugGroup.add(mesh);
+    }
+}
+
+// update per frame
+// update a single highlight at a given index
+function updateHighlight(collider, index, highlightBody = false) {
+    if (!Shared.rapierDebug.isVisible()) return;
+    if (!collider) return;
+    if (index >= highlightCollidingMeshes.length) return;
+
+    const mesh = highlightCollidingMeshes[index];
+    mesh.visible = true;
+
+    const rigidBody = collider.parent(); // optional: get parent rigid body
+    const position = highlightBody ? rigidBody.translation() : collider.translation();
+    const rotation = highlightBody ? rigidBody.rotation() : collider.rotation();
+
+    mesh.position.set(position.x, position.y, position.z);
+    mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+
+    const shape = collider.shape;
+    if (shape instanceof RAPIER.Cuboid) {
+        const hx = shape.halfExtents.x;
+        const hy = shape.halfExtents.y;
+        const hz = shape.halfExtents.z;
+        mesh.scale.set(hx*2, hy*2, hz*2);
+    } else if (shape instanceof RAPIER.Capsule) {
+        const r = shape.radius;
+        const hh = shape.halfHeight;
+        mesh.scale.set(r*2, hh*2+r*2, r*2);
+    } else if (shape instanceof RAPIER.Ball) {
+        const r = shape.radius;
+        mesh.scale.set(r*2, r*2, r*2);
+    } else {
+        mesh.scale.set(1,1,1);
+    }
+}
+
+function hideAllHighlights() {
+    highlightCollidingMeshes.forEach(m => m.visible = false);
 }
